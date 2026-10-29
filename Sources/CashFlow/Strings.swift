@@ -15,6 +15,13 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Closing adjustments": "Ajustes de cierre",
+        "Absorbs the difference so a closed month ends with zero remaining.": "Absorbe la diferencia para que un mes cerrado termine con restante cero.",
+        "Close %@": "Cerrar %@",
+        "Close %@?": "¿Cerrar %@?",
+        "Close month": "Cerrar mes",
+        "Month close": "Cierre de mes",
+        "Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched.": "Marca pagados los consumibles pendientes, deja el apartado de consumibles en cero y agrega un ajuste de cierre para que el restante quede en cero. No toca los fondos.",
         "%@ closes on %@": "%@ corta el %@",
         "Check the top-ups so the payment pocket covers the cycle.": "Revisa los abonos para que el bolsillo de pago cubra el ciclo.",
         "%@ payment due on %@": "Pago de %@ vence el %@",
@@ -292,6 +299,13 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Closing adjustments": "Ajustements de clôture",
+        "Absorbs the difference so a closed month ends with zero remaining.": "Absorbe la différence pour qu'un mois clôturé termine avec un restant nul.",
+        "Close %@": "Clôturer %@",
+        "Close %@?": "Clôturer %@ ?",
+        "Close month": "Clôturer le mois",
+        "Month close": "Clôture du mois",
+        "Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched.": "Marque les consommables en attente comme payés, met l'enveloppe consommables à zéro et ajoute un ajustement de clôture pour que le restant soit nul. Les fonds ne sont pas touchés.",
         "%@ closes on %@": "%@ clôture le %@",
         "Check the top-ups so the payment pocket covers the cycle.": "Vérifiez les provisions pour que la poche de paiement couvre le cycle.",
         "%@ payment due on %@": "Paiement %@ dû le %@",

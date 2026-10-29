@@ -152,6 +152,37 @@ public extension AppDatabase {
         }
     }
 
+    /// Cierra un mes pasado sin tocar los fondos: marca pagados los consumibles pendientes, deja el apartado
+    /// de consumibles en cero y agrega un ajuste de cierre para que el restante quede en cero.
+    /// Idempotente: si ya hay ajuste de cierre, lo recalcula.
+    func closeMonth(_ month: YearMonth, label: String = "Month close") throws {
+        guard let p = try snapshot().projection(for: month) else { return }
+        try write { db in
+            try Commitment.filter(Column("projectionId") == p.id! && Column("kind") == CommitmentKind.adjustment.rawValue).deleteAll(db)
+            try Expense.filter(Column("fromConsumables") == true && Column("consumableId") == nil && Column("reason") == label
+                               && Column("date") >= month.firstDay.key && Column("date") <= month.lastDay.key).deleteAll(db)
+            try Consumable.filter(Column("projectionId") == p.id! && Column("name") == label).deleteAll(db)
+            try Consumable.filter(Column("projectionId") == p.id! && Column("isPaid") == false)
+                .updateAll(db, Column("isPaid").set(to: true), Column("paidDate").set(to: month.lastDay.key))
+        }
+        var s = try snapshot().monthSummary(month)
+        if s.consumablesPending > 0 {
+            try saveExpense(Expense(date: month.lastDay, amount: s.consumablesPending, currency: .cop, reason: label, fundId: nil, fromConsumables: true))
+        } else if s.consumablesPending < 0 {
+            try write { db in
+                var c = Consumable(projectionId: p.id!, name: label, amount: -s.consumablesPending, isPaid: true, paidDate: month.lastDay, sortOrder: 999)
+                try c.insert(db)
+            }
+        }
+        s = try snapshot().monthSummary(month)
+        if s.remaining != 0 {
+            try write { db in
+                var cm = Commitment(projectionId: p.id!, kind: .adjustment, name: label, amount: s.remaining, date: month.lastDay)
+                try cm.insert(db)
+            }
+        }
+    }
+
     // MARK: Ingresos
 
     /// Guarda un ingreso con su desglose. Si `asTemplate`, el desglose pasa a ser la plantilla de la fuente.

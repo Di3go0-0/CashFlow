@@ -365,4 +365,26 @@ import GRDB
         try f.db.reorderFunds(ids: [f.compras.id!, f.moto.id!, f.consumibles.id!])
         #expect(try f.db.snapshot().funds.filter { !$0.isCardPocket }.map(\.name) == ["F. Compras Mes", "F. Ahorro Moto", "Consumibles"])
     }
+
+    @Test func closeMonthZeroesRemainingAndConsumablesWithoutTouchingFunds() throws {
+        let f = try Fixture()
+        let oct = YearMonth(year: 2026, month: 10)
+        let p = try f.db.startMonth(oct, fromTemplates: true)
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.linktic.id!, month: oct, date: oct.firstDay, netAmount: 4_000_000)))
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Music", amount: 31_000), asTemplate: false)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Phone", amount: 50_000), asTemplate: false)
+        try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 10, day: 5), amount: 3_500_000, currency: .cop, reason: "Big", fundId: nil))
+        let before = try f.db.snapshot()
+        let fundsBefore = before.funds.map { before.balance(of: $0.id!, asOf: DayDate(year: 2026, month: 10, day: 31)) }
+
+        try f.db.closeMonth(oct)
+        try f.db.closeMonth(oct) // idempotente
+        let snap = try f.db.snapshot()
+        let s = snap.monthSummary(oct)
+        #expect(s.remaining == 0)
+        #expect(s.consumablesPending == 0)
+        #expect(s.consumablesUnpaid == 0)
+        #expect(snap.commitments.filter { $0.kind == .adjustment }.count == 1)
+        #expect(snap.funds.map { snap.balance(of: $0.id!, asOf: DayDate(year: 2026, month: 10, day: 31)) } == fundsBefore)
+    }
 }

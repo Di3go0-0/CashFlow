@@ -349,6 +349,8 @@ public enum CommitmentKind: String, Codable, Sendable, DatabaseValueConvertible 
     case debt
     /// Gasto necesario puntual (ayuda madre, gafas, una salida grande).
     case necessary
+    /// Ajuste de cierre de mes: absorbe la diferencia para que el restante quede en cero. Puede ser negativo.
+    case adjustment
 }
 
 /// Plantilla de un compromiso recurrente (ayuda familiar, una deuda fija).

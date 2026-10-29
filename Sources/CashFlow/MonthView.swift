@@ -12,6 +12,7 @@ struct MonthView: View {
     @State private var editingConsumable: Consumable?
     @State private var showSources = false
     @State private var confirmDelete = false
+    @State private var confirmClose = false
     @State private var payingWithCard: Consumable?
 
     var body: some View {
@@ -32,7 +33,32 @@ struct MonthView: View {
                 consumablesSection(p)
                 commitmentsSection(p, kind: .debt, category: .debts, title: T("Debts and installments"), addLabel: T("Add debt"))
                 commitmentsSection(p, kind: .necessary, category: .necessary, title: T("Necessary expenses"), addLabel: T("Add necessary expense"))
+                let adjustments = model.commitments(of: p, kind: .adjustment)
+                if !adjustments.isEmpty {
+                    Section {
+                        ForEach(adjustments) { c in
+                            MoneyRow(title: c.name, amount: c.amount, subtitle: c.date.longDisplay)
+                        }
+                        .onDelete { idx in
+                            let ids = idx.map { adjustments[$0].id! }
+                            model.perform { try model.db.deleteCommitments(ids: ids, asTemplate: false) }
+                        }
+                    } header: {
+                        Text(T("Closing adjustments"))
+                    } footer: {
+                        Text(T("Absorbs the difference so a closed month ends with zero remaining."))
+                    }
+                }
                 resultSection
+                if model.month < .current() {
+                    Section {
+                        Button { confirmClose = true } label: {
+                            Label(T("Close %@", model.month.monthName), systemImage: "lock")
+                        }
+                    } footer: {
+                        Text(T("Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched."))
+                    }
+                }
                 if model.isFutureMonth {
                     Section {
                         Button(role: .destructive) { confirmDelete = true } label: {
@@ -64,6 +90,9 @@ struct MonthView: View {
         .sheet(isPresented: $showSources) { NavigationStack { IncomeSourcesView() } }
         .confirmationDialog(T("Undo starting %@?", model.month.monthName), isPresented: $confirmDelete, titleVisibility: .visible) {
             Button(T("Undo"), role: .destructive) { model.deleteMonth() }
+        }
+        .confirmationDialog(T("Close %@?", model.month.monthName), isPresented: $confirmClose, titleVisibility: .visible) {
+            Button(T("Close month")) { model.perform { try model.db.closeMonth(model.month, label: T("Month close")) } }
         }
     }
 

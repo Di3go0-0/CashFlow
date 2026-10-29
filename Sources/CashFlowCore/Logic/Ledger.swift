@@ -213,6 +213,8 @@ public struct MonthSummary: Hashable, Sendable {
     public var contributions: Int64
     public var debts: Int64
     public var necessary: Int64
+    /// Ajustes de cierre del mes (pueden ser negativos).
+    public var adjustments: Int64
     /// Total de consumibles del mes: se aparta completo al proyectar.
     public var consumablesTotal: Int64
     /// Ítems de consumibles ya pagados (por su valor).
@@ -230,7 +232,7 @@ public struct MonthSummary: Hashable, Sendable {
 
     /// Lo que queda del apartado de consumibles.
     public var consumablesPending: Int64 { consumablesTotal - consumablesSpent }
-    public var committed: Int64 { contributions + debts + necessary + consumablesTotal }
+    public var committed: Int64 { contributions + debts + necessary + consumablesTotal + adjustments }
     /// Lo que queda del ingreso después de repartirlo.
     public var extraBalance: Int64 { income - committed }
     /// Saldo extra menos lo que ya se gastó de él.
@@ -251,6 +253,7 @@ public extension Snapshot {
         let cms = commitments.filter { month.contains($0.date) }
         let debts = cms.filter { $0.kind == .debt }.reduce(0) { $0 + $1.amount }
         let necessary = cms.filter { $0.kind == .necessary }.reduce(0) { $0 + $1.amount }
+        let adjustments = cms.filter { $0.kind == .adjustment }.reduce(0) { $0 + $1.amount }
 
         let cons = consumables(for: month)
         let consTotal = cons.reduce(0) { $0 + $1.amount }
@@ -272,7 +275,7 @@ public extension Snapshot {
             + monthAllocs.filter(\.isFromExtra).reduce(0) { $0 + $1.amount }
 
         return MonthSummary(month: month, income: income, pendingIncome: pending, contributions: contributed,
-                            debts: debts, necessary: necessary, consumablesTotal: consTotal, consumablesPaid: consPaid,
+                            debts: debts, necessary: necessary, adjustments: adjustments, consumablesTotal: consTotal, consumablesPaid: consPaid,
                             consumablesSpent: consSpent, consumablesUnpaid: consUnpaid,
                             saved: saved, spent: spent, spentFromExtra: fromExtra)
     }
