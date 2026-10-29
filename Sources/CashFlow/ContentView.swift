@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 import GRDB
 
@@ -33,3 +34,4 @@ struct ContentView: View {
         }
     }
 }
+#endif

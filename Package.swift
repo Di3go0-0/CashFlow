@@ -20,11 +20,21 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
     ],
     targets: [
+        // Lógica y persistencia. Sin SwiftUI, para poder correr tests en Linux.
         .target(
-            name: "CashFlow",
+            name: "CashFlowCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
+        ),
+        // La app SwiftUI.
+        .target(
+            name: "CashFlow",
+            dependencies: ["CashFlowCore"]
+        ),
+        .testTarget(
+            name: "CashFlowCoreTests",
+            dependencies: ["CashFlowCore"]
         ),
     ]
 )

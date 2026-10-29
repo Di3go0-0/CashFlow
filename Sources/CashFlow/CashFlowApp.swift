@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 @main
@@ -8,3 +9,4 @@ struct CashFlowApp: App {
         }
     }
 }
+#endif
