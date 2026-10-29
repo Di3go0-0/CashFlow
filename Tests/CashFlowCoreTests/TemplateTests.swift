@@ -132,4 +132,34 @@ import GRDB
         #expect(fund.canEditInitialBalance(in: YearMonth(year: 2026, month: 11)))
         #expect(!fund.canEditInitialBalance(in: YearMonth(year: 2026, month: 12)))
     }
+
+    @Test func allocationFromConsumableMarksItPaidWithoutDoubleCounting() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Música", amount: 31_000), asTemplate: true)
+        let item = try f.db.snapshot().consumables(for: f.nov)[0]
+        let expense = try f.db.write { db -> CardExpense in
+            var e = CardExpense(cardId: f.unica.id!, date: DayDate(year: 2026, month: 11, day: 4), amount: 31_000, currency: .cop, reason: "Música")
+            try e.insert(db)
+            return e
+        }
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: expense.id!, fundId: nil, amount: 31_000,
+                                               date: DayDate(year: 2026, month: 11, day: 4), consumableId: item.id))
+        var snap = try f.db.snapshot()
+        let paid = snap.consumable(item.id)!
+        #expect(paid.isPaid && paid.paidDate == DayDate(year: 2026, month: 11, day: 4))
+        var s = snap.monthSummary(f.nov)
+        #expect(s.consumablesPending == 0)
+        #expect(s.spent == 31_000)          // solo el gasto de tarjeta, no doble
+        #expect(s.spentFromExtra == 0)      // no salió del saldo extra
+        let st = snap.cardStatus(f.unica, asOf: DayDate(year: 2026, month: 11, day: 10))
+        #expect(st.uncovered == 0 && st.pocketBalance == 31_000)
+
+        let a = snap.allocations.first { $0.consumableId == item.id }!
+        try f.db.deleteAllocations(ids: [a.id!])
+        snap = try f.db.snapshot()
+        #expect(snap.consumable(item.id)?.isPaid == false)
+        s = snap.monthSummary(f.nov)
+        #expect(s.consumablesPending == 31_000)
+    }
 }

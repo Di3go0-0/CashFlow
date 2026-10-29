@@ -264,6 +264,37 @@ public extension AppDatabase {
         }
     }
 
+    // MARK: Tarjetas: abonos
+
+    /// Guarda un abono. Si viene de un consumible, lo marca pagado en la fecha del abono.
+    func saveAllocation(_ allocation: CardAllocation) throws {
+        try write { db in
+            var a = allocation
+            if a.consumableId != nil { a.fundId = nil }
+            try a.save(db)
+            if let cid = a.consumableId, var c = try Consumable.fetchOne(db, id: cid) {
+                c.isPaid = true
+                c.paidDate = a.date
+                try c.update(db)
+            }
+        }
+    }
+
+    /// Borra abonos. Los consumibles que se pagaban con ellos vuelven a pendientes.
+    func deleteAllocations(ids: [Int64]) throws {
+        try write { db in
+            let items = try CardAllocation.filter(ids: ids).fetchAll(db)
+            try CardAllocation.deleteAll(db, ids: ids)
+            for cid in items.compactMap(\.consumableId) {
+                if var c = try Consumable.fetchOne(db, id: cid) {
+                    c.isPaid = false
+                    c.paidDate = nil
+                    try c.update(db)
+                }
+            }
+        }
+    }
+
     // MARK: Tarjetas: pagos
 
     /// Registra un pago de tarjeta y, si se pide, marca como pagados los gastos pendientes hasta una fecha.

@@ -226,6 +226,11 @@ public final class AppDatabase: Sendable {
                 }
             }
         }
+        m.registerMigration("v3") { db in
+            try db.alter(table: "cardAllocation") { t in
+                t.add(column: "consumableId", .integer).indexed().references("consumable", onDelete: .setNull)
+            }
+        }
         return m
     }
 }

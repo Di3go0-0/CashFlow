@@ -59,6 +59,14 @@ public struct Snapshot: Sendable {
         guard let p = projection(for: month) else { return [] }
         return consumables.filter { $0.projectionId == p.id }
     }
+    public func consumable(_ id: Int64?) -> Consumable? { id.flatMap { i in consumables.first { $0.id == i } } }
+
+    /// Nombre legible de la fuente de un abono.
+    public func allocationSourceName(_ a: CardAllocation) -> String {
+        if let c = consumable(a.consumableId) { return "Consumible: \(c.name)" }
+        if let f = fund(a.fundId) { return f.name }
+        return "Saldo extra"
+    }
 }
 
 // MARK: - Fondos
@@ -108,8 +116,7 @@ public extension Snapshot {
         if let pocket = fund(fundId), let cardId = pocket.cardId {
             for a in allocations {
                 guard let ce = expenseById[a.cardExpenseId], ce.cardId == cardId else { continue }
-                let from = fund(a.fundId)?.name ?? "Saldo extra"
-                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: "Abono desde \(from): \(ce.reason)", amount: a.amount, sourceId: a.id!))
+                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: "Abono desde \(allocationSourceName(a)): \(ce.reason)", amount: a.amount, sourceId: a.id!))
             }
             for p in payments where p.cardId == cardId {
                 out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: "Pago tarjeta", amount: -p.amount, sourceId: p.id!))
@@ -190,13 +197,16 @@ public extension Snapshot {
         let cons = consumables(for: month)
         let consTotal = cons.reduce(0) { $0 + $1.amount }
         let consPaid = cons.filter(\.isPaid).reduce(0) { $0 + $1.amount }
+        // Un consumible pagado con un abono de tarjeta ya está contado en el gasto de tarjeta.
+        let linked = Set(allocations.compactMap(\.consumableId))
+        let consPaidDirect = cons.filter { $0.isPaid && !linked.contains($0.id!) }.reduce(0) { $0 + $1.amount }
 
         let ex = expenses.filter { month.contains($0.date) }
         let cex = cardExpenses.filter { month.contains($0.date) }
-        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + debts + necessary + consPaid
+        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + debts + necessary + consPaidDirect
 
         let fromExtra = ex.filter { $0.fundId == nil }.reduce(0) { $0 + $1.amountCOP }
-            + allocations.filter { $0.fundId == nil && month.contains($0.date) }.reduce(0) { $0 + $1.amount }
+            + allocations.filter { $0.isFromExtra && month.contains($0.date) }.reduce(0) { $0 + $1.amount }
 
         return MonthSummary(month: month, income: income, pendingIncome: pending, contributions: contributed,
                             debts: debts, necessary: necessary, consumablesTotal: consTotal, consumablesPaid: consPaid,

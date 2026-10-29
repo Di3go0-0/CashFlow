@@ -275,7 +275,7 @@ struct CardExpenseEditView: View {
                         ForEach(allocations) { a in
                             HStack {
                                 VStack(alignment: .leading) {
-                                    Text(model.fundName(a.fundId))
+                                    Text(model.snapshot.allocationSourceName(a))
                                     Text(a.date.longDisplay).font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
@@ -284,7 +284,7 @@ struct CardExpenseEditView: View {
                         }
                         .onDelete { idx in
                             let ids = idx.map { allocations[$0].id! }
-                            model.write { db in try CardAllocation.deleteAll(db, ids: ids) }
+                            model.perform { try model.db.deleteAllocations(ids: ids) }
                         }
                         Button {
                             newAllocation = CardAllocation(cardExpenseId: expense.id!, fundId: nil, amount: uncovered, date: model.today)
@@ -299,7 +299,7 @@ struct CardExpenseEditView: View {
                                 .foregroundStyle(uncovered > 0 ? .red : .green)
                         }
                     } footer: {
-                        Text("Cada abono mueve dinero del fondo elegido al bolsillo de pago de la tarjeta.")
+                        Text("Cada abono mueve dinero al bolsillo de pago de la tarjeta desde un fondo, del saldo extra o de un consumible del mes, que queda pagado.")
                     }
                 } else {
                     Section {
@@ -342,31 +342,83 @@ struct CardExpenseEditView: View {
     }
 }
 
+/// Fuente de un abono.
+enum AllocationSource: Hashable {
+    case extra
+    case fund(Int64)
+    case consumable(Int64)
+
+    init(_ a: CardAllocation) {
+        if let c = a.consumableId { self = .consumable(c) }
+        else if let f = a.fundId { self = .fund(f) }
+        else { self = .extra }
+    }
+}
+
 struct AllocationEditView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State var allocation: CardAllocation
+    @State private var source: AllocationSource = .extra
+
+    private var pendingConsumables: [Consumable] {
+        model.consumables().filter { !$0.isPaid || $0.id == allocation.consumableId }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                FundPicker(title: "Sale de", fundId: $allocation.fundId)
+                Picker("Sale de", selection: $source) {
+                    Text("Saldo extra del mes").tag(AllocationSource.extra)
+                    if !pendingConsumables.isEmpty {
+                        Section("Consumibles de \(model.month.monthName)") {
+                            ForEach(pendingConsumables) { c in
+                                Text("\(c.name) · \(MoneyFormat.cop(c.amount))").tag(AllocationSource.consumable(c.id!))
+                            }
+                        }
+                    }
+                    Section("Fondos") {
+                        ForEach(model.activeFunds) { f in
+                            Text(f.name).tag(AllocationSource.fund(f.id!))
+                        }
+                    }
+                }
+                .onChange(of: source) { _, new in
+                    switch new {
+                    case .extra:
+                        allocation.fundId = nil
+                        allocation.consumableId = nil
+                    case .fund(let id):
+                        allocation.fundId = id
+                        allocation.consumableId = nil
+                    case .consumable(let id):
+                        allocation.fundId = nil
+                        allocation.consumableId = id
+                        if let c = model.snapshot.consumable(id) { allocation.amount = c.amount }
+                    }
+                }
                 MoneyField(title: "Monto", amount: $allocation.amount)
+                    .id(source)
                 DayDatePicker(title: "Fecha", day: $allocation.date)
-                if let fid = allocation.fundId {
-                    MoneyRow(title: "Saldo del fondo", amount: model.snapshot.balance(of: fid, asOf: model.today))
-                } else {
+                switch source {
+                case .extra:
                     MoneyRow(title: "Restante del saldo extra", amount: model.summary.remaining)
+                case .fund(let id):
+                    MoneyRow(title: "Saldo del fondo", amount: model.snapshot.balance(of: id, asOf: model.today))
+                case .consumable:
+                    MoneyRow(title: "Consumibles por pagar", amount: model.summary.consumablesPending,
+                             subtitle: "El consumible quedará marcado como pagado")
                 }
             }
             .navigationTitle("Abono")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { source = AllocationSource(allocation) }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
                         let a = allocation
-                        if model.write({ db in var a = a; try a.save(db) }) { dismiss() }
+                        if model.perform({ try model.db.saveAllocation(a) }) { dismiss() }
                     }
                     .disabled(allocation.amount <= 0)
                 }

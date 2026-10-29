@@ -517,24 +517,30 @@ public struct CardExpense: Codable, Identifiable, Hashable, Sendable, FetchableR
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 
-/// Abono a un gasto de tarjeta: mueve dinero de un fondo (o del saldo extra) al bolsillo de pago de la tarjeta.
+/// Abono a un gasto de tarjeta: mueve dinero al bolsillo de pago de la tarjeta desde un fondo,
+/// desde el saldo extra del mes, o desde un consumible del mes (que queda pagado).
 public struct CardAllocation: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "cardAllocation"
 
     public var id: Int64?
     public var cardExpenseId: Int64
-    /// Nil = saldo extra del mes.
+    /// Fondo de origen. Nil y sin consumible = saldo extra del mes.
     public var fundId: Int64?
     public var amount: Int64
     public var date: DayDate
+    /// Consumible del mes que se paga con este abono.
+    public var consumableId: Int64?
 
-    public init(id: Int64? = nil, cardExpenseId: Int64, fundId: Int64?, amount: Int64, date: DayDate) {
+    public init(id: Int64? = nil, cardExpenseId: Int64, fundId: Int64?, amount: Int64, date: DayDate, consumableId: Int64? = nil) {
         self.id = id
         self.cardExpenseId = cardExpenseId
         self.fundId = fundId
         self.amount = amount
         self.date = date
+        self.consumableId = consumableId
     }
+
+    public var isFromExtra: Bool { fundId == nil && consumableId == nil }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
