@@ -25,6 +25,25 @@
 			</array>
 		</dict>
 	</array>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>add-card-expense</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Add card expense</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>creditcard</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>add-expense</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Add expense</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>cart</string>
+		</dict>
+	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Automatic</string>
 </dict>

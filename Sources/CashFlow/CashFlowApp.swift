@@ -4,6 +4,7 @@ import CashFlowCore
 
 @main
 struct CashFlowApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
 
     var body: some Scene {
@@ -17,6 +18,8 @@ struct CashFlowApp: App {
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
+    @State private var quick = QuickActions.shared
+    @State private var quickSheet: QuickActions.Action?
 
     var body: some View {
         @Bindable var model = model
@@ -35,6 +38,14 @@ struct RootView: View {
         .id(model.language)
         .tint(Theme.accent)
         .fontDesign(.rounded)
+        .onChange(of: quick.pending, initial: true) { _, action in
+            guard let action else { return }
+            quickSheet = action
+            quick.pending = nil
+        }
+        .sheet(item: $quickSheet) { action in
+            NewExpenseSheet(initialCardId: action == .addCardExpense ? model.activeCards.first?.id : nil)
+        }
         .onOpenURL { url in
             if let back = model.handle(url) {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { openURL(back) }
@@ -63,5 +74,9 @@ struct RootView: View {
             Text(model.errorMessage ?? "")
         }
     }
+}
+
+extension QuickActions.Action: Identifiable {
+    var id: String { rawValue }
 }
 #endif
