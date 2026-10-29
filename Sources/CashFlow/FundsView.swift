@@ -20,6 +20,11 @@ struct FundsView: View {
                         FundRow(report: r, index: i)
                     }
                 }
+                .onMove { from, to in
+                    var ordered = regular.map(\.fund)
+                    ordered.move(fromOffsets: from, toOffset: to)
+                    model.perform { try model.db.reorderFunds(ids: ordered.map { $0.id! }) }
+                }
             } header: {
                 HStack {
                     Text(T("Funds"))
@@ -40,6 +45,7 @@ struct FundsView: View {
         .navigationTitle(T("Funds"))
         .navigationDestination(for: Int64.self) { FundDetailView(fundId: $0) }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) { EditButton() }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showNew = true } label: { Image(systemName: "plus") }
             }

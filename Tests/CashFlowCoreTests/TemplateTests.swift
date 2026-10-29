@@ -312,4 +312,57 @@ import GRDB
         let pocketFlow = try f.db.snapshot().fundFlow(of: f.db.snapshot().pocket(of: f.unica.id!)!.id!, month: f.nov, asOf: d)
         #expect(pocketFlow.inflows.first?.counterparty == f.compras.name)
     }
+
+    @Test func insightsConceptsProjectionCSV() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov, fromTemplates: true)
+        let d = DayDate(year: 2026, month: 11, day: 10)
+        try f.db.saveExpense(Expense(date: d, amount: 20_000, currency: .cop, reason: "D1 ", fundId: f.compras.id))
+        try f.db.saveExpense(Expense(date: d, amount: 30_000, currency: .cop, reason: "d1", fundId: nil))
+        try f.db.write { db in
+            var e = CardExpense(cardId: f.unica.id!, date: d, amount: 15_000, currency: .cop, reason: "D1")
+            try e.insert(db)
+            var g = CardExpense(cardId: f.unica.id!, date: d, amount: 50_000, currency: .cop, reason: "Gas")
+            try g.insert(db)
+        }
+        let snap = try f.db.snapshot()
+        let concepts = snap.conceptTotals(for: f.nov)
+        #expect(concepts.first?.name == "D1" && concepts.first?.total == 65_000 && concepts.first?.count == 3)
+        #expect(concepts.count == 2)
+
+        // Ritmo: 30.000 del extra en 10 días → 3.000/día × 20 días restantes = 60.000 más.
+        let s = snap.monthSummary(f.nov)
+        #expect(snap.projectedRemaining(for: f.nov, asOf: d) == s.remaining - 60_000)
+        #expect(snap.projectedRemaining(for: f.nov, asOf: DayDate(year: 2026, month: 12, day: 1)) == nil)
+
+        let csv = CSVExport.month(snap, f.nov)
+        let lines = csv.split(separator: "\n")
+        #expect(lines.count == 5)
+        #expect(lines[0].hasPrefix("date,type,card,reason"))
+        #expect(csv.contains("2026-11-10,card,Crédito,Gas,50000,COP,50000,,,no"))
+    }
+
+    @Test func payConsumableWithCardAndReorder() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Music", amount: 31_000), asTemplate: true)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Phone", amount: 50_000), asTemplate: true)
+        var items = try f.db.snapshot().consumables(for: f.nov)
+        let music = items.first { $0.name == "Music" }!
+        let e = try f.db.payConsumableWithCard(consumableId: music.id!, cardId: f.unica.id!, date: DayDate(year: 2026, month: 11, day: 3), amount: 1_000, currency: .usd, rate: 4_000)
+        let snap = try f.db.snapshot()
+        #expect(e.amountCOP == 40_000 && e.reason == "Music")
+        #expect(snap.consumable(music.id)?.isPaid == true)
+        let st = snap.cardStatus(f.unica, asOf: DayDate(year: 2026, month: 11, day: 10))
+        #expect(st.uncovered == 0 && st.pocketBalance == 40_000)
+        #expect(snap.monthSummary(f.nov).consumablesSpent == 40_000)
+
+        try f.db.reorderConsumables(ids: items.reversed().map { $0.id! })
+        items = try f.db.snapshot().consumables(for: f.nov)
+        #expect(items.map(\.name) == ["Phone", "Music"])
+        #expect(try f.db.snapshot().consumableTemplates.sorted { $0.sortOrder < $1.sortOrder }.map(\.name) == ["Phone", "Music"])
+
+        try f.db.reorderFunds(ids: [f.compras.id!, f.moto.id!, f.consumibles.id!])
+        #expect(try f.db.snapshot().funds.filter { !$0.isCardPocket }.map(\.name) == ["F. Compras Mes", "F. Ahorro Moto", "Consumibles"])
+    }
 }

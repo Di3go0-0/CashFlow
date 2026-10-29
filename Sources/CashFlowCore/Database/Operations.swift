@@ -452,6 +452,45 @@ public extension AppDatabase {
         }
     }
 
+    /// Paga un consumible con tarjeta: crea el gasto y el abono ligado al ítem (que queda pagado).
+    @discardableResult
+    func payConsumableWithCard(consumableId: Int64, cardId: Int64, date: DayDate, amount: Int64, currency: Currency, rate: Double?) throws -> CardExpense {
+        try write { db in
+            guard let item = try Consumable.fetchOne(db, id: consumableId) else { throw DatabaseError(message: "Consumable not found") }
+            var e = CardExpense(cardId: cardId, date: date, amount: amount, currency: currency, rate: rate, reason: item.name)
+            try e.insert(db)
+            var a = CardAllocation(cardExpenseId: e.id!, fundId: nil, amount: e.amountCOP, date: date, consumableId: consumableId, fromConsumables: true)
+            try a.insert(db)
+            var c = item
+            c.isPaid = true
+            c.paidDate = date
+            try c.update(db)
+            return e
+        }
+    }
+
+    // MARK: Orden
+
+    func reorderFunds(ids: [Int64]) throws {
+        try write { db in
+            for (i, id) in ids.enumerated() {
+                if var f = try Fund.fetchOne(db, id: id) { f.sortOrder = i; try f.update(db) }
+            }
+        }
+    }
+
+    func reorderConsumables(ids: [Int64]) throws {
+        try write { db in
+            for (i, id) in ids.enumerated() {
+                if var c = try Consumable.fetchOne(db, id: id) {
+                    c.sortOrder = i
+                    try c.update(db)
+                    if let tid = c.templateId, var t = try ConsumableTemplate.fetchOne(db, id: tid) { t.sortOrder = i; try t.update(db) }
+                }
+            }
+        }
+    }
+
     // MARK: Tarjetas: pagos
 
     /// Registra un pago de tarjeta y, si se pide, marca como pagados los gastos pendientes hasta una fecha.

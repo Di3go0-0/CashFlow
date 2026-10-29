@@ -57,6 +57,27 @@ struct SettingsView: View {
                 Text(T("The rate is stored in each USD expense when you record it. Changing it later does not alter history."))
             }
 
+            Section {
+                Toggle(T("Credit card reminders"), isOn: Binding(
+                    get: { model.remindersEnabled },
+                    set: { on in
+                        if on {
+                            Task {
+                                let granted = await Reminders.requestPermission()
+                                model.remindersEnabled = granted
+                                if !granted { model.errorMessage = T("Notifications are not allowed. Enable them in iOS Settings.") }
+                            }
+                        } else {
+                            model.remindersEnabled = false
+                        }
+                    }
+                ))
+            } header: {
+                Text(T("Reminders"))
+            } footer: {
+                Text(T("A notification at 9:00, two days before each closing day and each payment due day."))
+            }
+
             Section(T("Catalogs")) {
                 NavigationLink(T("Income sources")) { IncomeSourcesView() }
                 NavigationLink(T("Installment purchases")) { PlansView() }

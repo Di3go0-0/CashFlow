@@ -18,6 +18,14 @@ final class AppModel {
         }
     }
 
+    /// Recordatorios de corte y pago de tarjetas.
+    var remindersEnabled = false {
+        didSet {
+            try? db.setSetting(Setting.remindersKey, remindersEnabled ? "1" : nil)
+            if remindersEnabled { Reminders.reschedule(cards: activeCards, today: today) } else { Reminders.clear() }
+        }
+    }
+
     /// TRM vigente: manual si está definida, si no la última descargada.
     private(set) var rate: Double?
     private(set) var rateSource = ""
@@ -28,6 +36,7 @@ final class AppModel {
         let saved = (try? db.setting(Setting.languageKey)).flatMap { $0 }.flatMap(AppLanguage.init(rawValue:))
         language = saved ?? .en
         L10n.language = language
+        remindersEnabled = ((try? db.setting(Setting.remindersKey)) ?? nil) == "1"
         reload()
     }
 
@@ -51,6 +60,7 @@ final class AppModel {
                 try db.startMonth(current)
                 snapshot = try db.snapshot()
             }
+            if remindersEnabled { Reminders.reschedule(cards: activeCards, today: today) }
         } catch {
             report(error)
         }
@@ -115,6 +125,14 @@ final class AppModel {
     }
 
     func consumables() -> [Consumable] { snapshot.consumables(for: month) }
+    var fundsInTheRed: [Fund] { snapshot.fundsInTheRed(asOf: today) }
+    var projectedRemaining: Int64? { snapshot.projectedRemaining(for: month, asOf: today) }
+
+    /// Saldo que quedaría en un fondo después de sacarle `amount` hoy.
+    func balanceAfter(fundId: Int64?, spending amount: Int64) -> Int64? {
+        guard let fundId else { return nil }
+        return snapshot.balance(of: fundId, asOf: today) - amount
+    }
 
     func startMonth() {
         perform { try db.startMonth(month) }

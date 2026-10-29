@@ -15,15 +15,22 @@ struct ExpensesView: View {
     @State private var editing: Expense?
     @State private var editingCard: CardExpense?
     @State private var showNew = false
+    @State private var query = ""
+    @State private var csvURL: URL?
+
+    private func matches(_ reason: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return q.isEmpty || reason.lowercased().contains(q)
+    }
 
     private var monthExpenses: [Expense] {
-        model.snapshot.expenses.filter { model.month.contains($0.date) }
+        model.snapshot.expenses.filter { model.month.contains($0.date) && matches($0.reason) }
     }
 
     private func monthCardExpenses(_ cardId: Int64) -> [CardExpenseStatus] {
         let allocByExpense = Dictionary(grouping: model.snapshot.allocations, by: \.cardExpenseId)
         return model.snapshot.cardExpenses
-            .filter { $0.cardId == cardId && model.month.contains($0.date) }
+            .filter { $0.cardId == cardId && model.month.contains($0.date) && matches($0.reason) }
             .map { CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? []) }
     }
 
@@ -51,6 +58,10 @@ struct ExpensesView: View {
                 }
             }
 
+            if filter == .all && query.isEmpty {
+                conceptsSection
+            }
+
             if showsNoCard {
                 noCardSection
             }
@@ -68,16 +79,74 @@ struct ExpensesView: View {
             }
         }
         .navigationTitle(T("Expenses"))
+        .searchable(text: $query, prompt: T("Search by reason"))
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { exportCSV() } label: { Image(systemName: "square.and.arrow.up") }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showNew = true } label: { Image(systemName: "plus") }
             }
+        }
+        .sheet(item: $csvURL) { url in
+            NavigationStack {
+                List {
+                    Section {
+                        ShareLink(item: url) { Label(T("Share %@", url.lastPathComponent), systemImage: "doc.text") }
+                    } footer: {
+                        Text(T("One row per expense, with and without card, for %@.", model.month.displayName))
+                    }
+                }
+                .navigationTitle(T("CSV export"))
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showNew) {
             NewExpenseSheet(initialCardId: { if case .card(let id) = filter { return id } else { return nil } }())
         }
         .sheet(item: $editing) { ExpenseEditView(expense: $0) }
         .sheet(item: $editingCard) { CardExpenseEditView(expense: $0, defaultCardId: $0.cardId) }
+    }
+
+    private func exportCSV() {
+        do {
+            let csv = CSVExport.month(model.snapshot, model.month)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("cashflow-\(model.month.key).csv")
+            try csv.data(using: .utf8)!.write(to: url, options: .atomic)
+            csvURL = url
+        } catch {
+            model.report(error)
+        }
+    }
+
+    private var conceptsSection: some View {
+        let concepts = model.snapshot.conceptTotals(for: model.month)
+        let top = Array(concepts.prefix(8))
+        let maxTotal = top.first?.total ?? 1
+        return Section {
+            if top.isEmpty {
+                EmptyHint(text: T("Repeated concepts will show up here."))
+            }
+            ForEach(top) { c in
+                Button { query = c.name } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(c.name)
+                            Text(T("%d times", c.count)).font(.caption2).foregroundStyle(.secondary)
+                            Spacer()
+                            MoneyText(amount: c.total)
+                        }
+                        ThinBar(fraction: Double(c.total) / Double(max(maxTotal, 1)), color: Theme.accent)
+                    }
+                }
+                .tint(.primary)
+            }
+        } header: {
+            Text(T("By concept"))
+        } footer: {
+            Text(T("Tap a concept to filter the lists."))
+        }
     }
 
     private var noCardSection: some View {
@@ -189,9 +258,11 @@ struct ExpenseEditView: View {
                 Section {
                     CurrencyPicker(currency: $expense.currency)
                     MoneyField(title: T("Amount"), amount: $expense.amount, currency: expense.currency)
+                        .onChange(of: expense.amount) { _, _ in expense.recomputeCOP() }
                     if expense.currency == .usd {
                         RateField(rate: $expense.rate)
                             .onAppear { if expense.rate == nil { expense.rate = model.rate } }
+                            .onChange(of: expense.rate) { _, _ in expense.recomputeCOP() }
                         MoneyRow(title: T("In pesos"), amount: Exchange.toCOP(amountMinor: expense.amount, currency: .usd, rate: expense.rate))
                     }
                 }
@@ -208,6 +279,7 @@ struct ExpenseEditView: View {
                                 if expense.currency == .cop && expense.amount == 0 { expense.amount = c.amount }
                             }
                         }
+                    FundShortfallWarning(source: source, amount: expense.amountCOP)
                     SourceBalanceRow(source: source)
                 }
             }
@@ -229,5 +301,9 @@ struct ExpenseEditView: View {
             }
         }
     }
+}
+
+extension URL: @retroactive Identifiable {
+    public var id: String { absoluteString }
 }
 #endif

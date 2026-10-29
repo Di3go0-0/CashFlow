@@ -31,6 +31,27 @@ struct SummaryView: View {
                 }
             }
 
+            let red = model.fundsInTheRed
+            if !red.isEmpty {
+                Section {
+                    ForEach(red) { f in
+                        Label {
+                            HStack {
+                                Text(f.name)
+                                Spacer()
+                                MoneyText(amount: model.snapshot.balance(of: f.id!, asOf: model.today)).foregroundStyle(.red)
+                            }
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                        }
+                    }
+                } header: {
+                    Text(T("Funds in the red"))
+                } footer: {
+                    Text(T("You spent more than these funds had. Move money in or review the expenses."))
+                }
+            }
+
             Section(T("This month")) {
                 MoneyRow(title: T("Income"), amount: s.income,
                          subtitle: s.pendingIncome > 0 ? T("Pending: %@", MoneyFormat.cop(s.pendingIncome)) : nil)
@@ -47,6 +68,10 @@ struct SummaryView: View {
                 MoneyRow(title: T("Extra balance"), amount: s.extraBalance, subtitle: T("Income minus funds, consumables, debts and necessary"))
                 MoneyRow(title: T("Spent from extra"), amount: s.spentFromExtra)
                 MoneyRow(title: T("Remaining"), amount: s.remaining, emphasis: true, color: s.remaining < 0 ? .red : .primary)
+                if let projected = model.projectedRemaining {
+                    MoneyRow(title: T("At this pace, month end"), amount: projected, color: projected < 0 ? .orange : .secondary,
+                             subtitle: T("If spending from the extra balance continues at the current daily rate"))
+                }
             }
 
             if s.committed > 0 || s.income > 0 {

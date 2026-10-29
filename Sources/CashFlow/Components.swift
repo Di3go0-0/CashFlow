@@ -229,6 +229,21 @@ struct SourceBalanceRow: View {
     }
 }
 
+/// Aviso cuando una salida dejaría un fondo en negativo.
+struct FundShortfallWarning: View {
+    var source: MoneySource
+    var amount: Int64
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let fid = source.fundId, let after = model.balanceAfter(fundId: fid, spending: amount), after < 0, amount > 0 {
+            Label(T("This leaves %@ at %@", model.fundName(fid), MoneyFormat.cop(after)), systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+}
+
 struct EmptyHint: View {
     var text: String
     var body: some View {

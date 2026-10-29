@@ -307,8 +307,13 @@ struct CardExpenseEditView: View {
                         HStack {
                             Text(T("Top-ups to the payment pocket"))
                             Spacer()
-                            Text(uncovered > 0 ? T("Missing %@", MoneyFormat.cop(uncovered)) : T("Covered"))
-                                .foregroundStyle(uncovered > 0 ? .red : .green)
+                            let over = allocations.reduce(0) { $0 + $1.amount } - expense.amountCOP
+                            if over > 0 {
+                                Text(T("Over by %@", MoneyFormat.cop(over))).foregroundStyle(.orange)
+                            } else {
+                                Text(uncovered > 0 ? T("Missing %@", MoneyFormat.cop(uncovered)) : T("Covered"))
+                                    .foregroundStyle(uncovered > 0 ? .red : .green)
+                            }
                         }
                     } footer: {
                         Text(T("Each top-up moves money into the card's payment pocket from a fund, the extra balance or the consumables pool (whose item gets marked as paid)."))
@@ -359,6 +364,13 @@ struct AllocationEditView: View {
     @State var allocation: CardAllocation
     @State private var source: MoneySource = .extra
 
+    /// Lo que falta cubrir del gasto sin contar este abono.
+    private var remainingToCover: Int64 {
+        guard let e = model.snapshot.cardExpenses.first(where: { $0.id == allocation.cardExpenseId }) else { return 0 }
+        let others = model.snapshot.allocations.filter { $0.cardExpenseId == e.id && $0.id != allocation.id }.reduce(0) { $0 + $1.amount }
+        return max(0, e.amountCOP - others)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -371,6 +383,13 @@ struct AllocationEditView: View {
                     }
                 MoneyField(title: T("Amount"), amount: $allocation.amount)
                     .id(source)
+                if allocation.amount > remainingToCover {
+                    Label(T("This top-up exceeds what is left to cover (%@)", MoneyFormat.cop(remainingToCover)), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                    Button(T("Use the exact amount")) { allocation.amount = remainingToCover }
+                        .disabled(remainingToCover <= 0)
+                }
+                FundShortfallWarning(source: source, amount: allocation.amount)
                 DayDatePicker(title: T("Date"), day: $allocation.date)
                 SourceBalanceRow(source: source)
             }

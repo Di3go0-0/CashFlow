@@ -12,6 +12,7 @@ struct MonthView: View {
     @State private var editingConsumable: Consumable?
     @State private var showSources = false
     @State private var confirmDelete = false
+    @State private var payingWithCard: Consumable?
 
     var body: some View {
         @Bindable var model = model
@@ -54,6 +55,8 @@ struct MonthView: View {
             }
         }
         .navigationTitle(T("Month"))
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
+        .sheet(item: $payingWithCard) { PayConsumableSheet(item: $0) }
         .sheet(item: $editingIncome) { IncomeEditView(detail: $0) }
         .sheet(item: $editingContribution) { ContributionEditView(contribution: $0) }
         .sheet(item: $editingCommitment) { CommitmentEditView(commitment: $0) }
@@ -196,10 +199,20 @@ struct MonthView: View {
                     }
                     .tint(.primary)
                 }
+                .swipeActions(edge: .leading) {
+                    if !c.isPaid && !model.activeCards.isEmpty {
+                        Button { payingWithCard = c } label: { Label(T("Pay with card"), systemImage: "creditcard") }.tint(Theme.accent)
+                    }
+                }
             }
             .onDelete { idx in
                 let ids = idx.map { items[$0].id! }
                 model.perform { try model.db.deleteConsumables(ids: ids, asTemplate: model.editsTemplate) }
+            }
+            .onMove { from, to in
+                var ordered = items
+                ordered.move(fromOffsets: from, toOffset: to)
+                model.perform { try model.db.reorderConsumables(ids: ordered.map { $0.id! }) }
             }
             Button {
                 editingConsumable = Consumable(projectionId: p.id!, name: "", amount: 0)
@@ -438,6 +451,59 @@ struct ContributionEditView: View {
                         if model.perform({ try model.db.saveContribution(c, asTemplate: asTemplate) }) { dismiss() }
                     }
                     .disabled(contribution.amount <= 0)
+                }
+            }
+        }
+    }
+}
+
+/// Paga un consumible con una tarjeta de crédito: crea el gasto y el abono ligado en un paso.
+struct PayConsumableSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var item: Consumable
+    @State private var cardId: Int64 = 0
+    @State private var amount: Int64 = 0
+    @State private var currency: Currency = .cop
+    @State private var rate: Double?
+    @State private var date: DayDate = .today()
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker(T("Credit card"), selection: $cardId) {
+                        ForEach(model.activeCards) { c in Text(c.name).tag(c.id!) }
+                    }
+                    CurrencyPicker(currency: $currency)
+                    MoneyField(title: T("Amount"), amount: $amount, currency: currency)
+                    if currency == .usd {
+                        RateField(rate: $rate)
+                        MoneyRow(title: T("In pesos"), amount: Exchange.toCOP(amountMinor: amount, currency: .usd, rate: rate))
+                    }
+                    DayDatePicker(title: T("Date"), day: $date)
+                } footer: {
+                    Text(T("Creates the credit card expense and a top-up from the consumables pool. The item is marked as paid."))
+                }
+            }
+            .navigationTitle(T("Pay %@ with card", item.name))
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                cardId = model.activeCards.first?.id ?? 0
+                amount = item.amount
+                rate = model.rate
+                date = model.defaultDate
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(T("Pay")) {
+                        let ok = model.perform {
+                            try model.db.payConsumableWithCard(consumableId: item.id!, cardId: cardId, date: date, amount: amount, currency: currency, rate: rate)
+                        }
+                        if ok { dismiss() }
+                    }
+                    .disabled(cardId == 0 || amount <= 0 || (currency == .usd && (rate ?? 0) <= 0))
                 }
             }
         }
