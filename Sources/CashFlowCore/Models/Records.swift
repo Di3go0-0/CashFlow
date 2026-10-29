@@ -633,4 +633,6 @@ public struct Setting: Codable, Hashable, Sendable, FetchableRecord, Persistable
     public static let manualRateKey = "trm.manual"
     public static let cachedRateKey = "trm.cached"
     public static let cachedRateDateKey = "trm.cachedDate"
+    public static let languageKey = "ui.language"
+    public static let languageKey = "language"
 }

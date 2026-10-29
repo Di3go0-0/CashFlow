@@ -35,7 +35,7 @@ struct MoneyRow: View {
     }
 }
 
-/// Campo de dinero. Guarda unidad menor de la moneda. Al cambiar de moneda se limpia.
+/// Campo de dinero con separadores de miles mientras se escribe. Al cambiar de moneda se limpia.
 struct MoneyField: View {
     var title: String
     @Binding var amount: Int64
@@ -125,7 +125,7 @@ struct CurrencyPicker: View {
     @Binding var currency: Currency
 
     var body: some View {
-        Picker("Moneda", selection: $currency) {
+        Picker(T("Currency"), selection: $currency) {
             Text("COP").tag(Currency.cop)
             Text("USD").tag(Currency.usd)
         }
@@ -140,7 +140,7 @@ struct RateField: View {
 
     var body: some View {
         HStack {
-            Text("TRM")
+            Text(T("Exchange rate"))
             Spacer()
             TextField("0", text: $text)
                 .keyboardType(.decimalPad)
@@ -152,25 +152,6 @@ struct RateField: View {
                     if let rate { text = String(format: "%.2f", rate) }
                 }
             Text("COP/USD").font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-/// Selector de fondo. `nil` = saldo extra del mes.
-struct FundPicker: View {
-    var title = "Fuente"
-    @Binding var fundId: Int64?
-    var allowExtra = true
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        Picker(title, selection: $fundId) {
-            if allowExtra {
-                Text("Saldo extra del mes").tag(Int64?.none)
-            }
-            ForEach(model.activeFunds) { f in
-                Text(f.name).tag(Int64?.some(f.id!))
-            }
         }
     }
 }
@@ -201,9 +182,8 @@ enum MoneySource: Hashable {
 
 /// Selector de origen: saldo extra, apartado de consumibles, un ítem de consumible o un fondo.
 struct SourcePicker: View {
-    var title = "Sale de"
+    var title = ""
     @Binding var source: MoneySource
-    /// Ítem ya ligado (para seguir mostrándolo aunque esté pagado).
     var currentConsumableId: Int64?
     @Environment(AppModel.self) private var model
 
@@ -212,15 +192,15 @@ struct SourcePicker: View {
     }
 
     var body: some View {
-        Picker(title, selection: $source) {
-            Text("Saldo extra del mes").tag(MoneySource.extra)
-            Section("Consumibles de \(model.month.monthName)") {
-                Text("Apartado de consumibles").tag(MoneySource.consumables)
+        Picker(title.isEmpty ? T("Paid from") : title, selection: $source) {
+            Text(T("Extra balance of the month")).tag(MoneySource.extra)
+            Section(T("Consumables of %@", model.month.monthName)) {
+                Text(T("Consumables pool")).tag(MoneySource.consumables)
                 ForEach(items) { c in
                     Text("\(c.name) · \(MoneyFormat.cop(c.amount))").tag(MoneySource.consumable(c.id!))
                 }
             }
-            Section("Fondos") {
+            Section(T("Funds")) {
                 ForEach(model.activeFunds) { f in
                     Text(f.name).tag(MoneySource.fund(f.id!))
                 }
@@ -237,14 +217,14 @@ struct SourceBalanceRow: View {
     var body: some View {
         switch source {
         case .extra:
-            MoneyRow(title: "Restante del saldo extra", amount: model.summary.remaining)
+            MoneyRow(title: T("Remaining extra balance"), amount: model.summary.remaining)
         case .consumables:
-            MoneyRow(title: "Queda del apartado de consumibles", amount: model.summary.consumablesPending)
+            MoneyRow(title: T("Left in consumables pool"), amount: model.summary.consumablesPending)
         case .consumable:
-            MoneyRow(title: "Queda del apartado de consumibles", amount: model.summary.consumablesPending,
-                     subtitle: "El ítem quedará marcado como pagado")
+            MoneyRow(title: T("Left in consumables pool"), amount: model.summary.consumablesPending,
+                     subtitle: T("The item will be marked as paid"))
         case .fund(let id):
-            MoneyRow(title: "Saldo del fondo", amount: model.snapshot.balance(of: id, asOf: model.today))
+            MoneyRow(title: T("Fund balance"), amount: model.snapshot.balance(of: id, asOf: model.today))
         }
     }
 }
@@ -263,5 +243,32 @@ extension Int64 {
     var balanceColor: Color {
         self < 0 ? .red : .primary
     }
+}
+
+/// Paleta categórica validada (orden fijo) con pasos para modo oscuro.
+enum Palette {
+    static func series(_ scheme: ColorScheme) -> [Color] {
+        scheme == .dark
+            ? [Color(hex: 0x3987e5), Color(hex: 0xd95926), Color(hex: 0x199e70), Color(hex: 0xc98500), Color(hex: 0xd55181)]
+            : [Color(hex: 0x2a78d6), Color(hex: 0xeb6834), Color(hex: 0x1baf7a), Color(hex: 0xeda100), Color(hex: 0xe87ba4)]
+    }
+}
+
+extension Color {
+    init(hex: UInt32) {
+        self.init(red: Double((hex >> 16) & 0xff) / 255, green: Double((hex >> 8) & 0xff) / 255, blue: Double(hex & 0xff) / 255)
+    }
+}
+
+/// "4.5M", "250k", "900"
+func compactCOP(_ v: Int64) -> String {
+    let a = Swift.abs(Double(v))
+    let sign = v < 0 ? "-" : ""
+    if a >= 1_000_000 {
+        let m = a / 1_000_000
+        return sign + (m == m.rounded() ? String(Int(m)) : String(format: "%.1f", m).replacingOccurrences(of: ".", with: ",")) + "M"
+    }
+    if a >= 1_000 { return sign + String(Int((a / 1_000).rounded())) + "k" }
+    return sign + String(Int(a))
 }
 #endif

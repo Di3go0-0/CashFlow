@@ -64,14 +64,11 @@ public struct YearMonth: Hashable, Comparable, Sendable, CustomStringConvertible
         return YearMonth(year: c.year!, month: c.month!)
     }
 
-    private static let monthNames = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ]
-
-    public var monthName: String { Self.monthNames[month - 1] }
-    /// "Noviembre 2026"
+    public var monthName: String { L10n.monthName(month) }
+    public func monthName(in lang: AppLanguage) -> String { L10n.monthName(month, in: lang) }
+    /// "November 2026"
     public var displayName: String { "\(monthName) \(year)" }
+    public func displayName(in lang: AppLanguage) -> String { "\(monthName(in: lang)) \(year)" }
 }
 
 extension YearMonth: Codable {
@@ -164,15 +161,27 @@ public struct DayDate: Hashable, Comparable, Sendable, CustomStringConvertible {
         return DayDate(year: year, month: month, day: min(max(day, 1), ym.daysInMonth))
     }
 
-    /// "5 nov"
-    public var shortDisplay: String {
-        let names = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
-        return "\(day) \(names[month - 1])"
+    /// "Nov 5" / "5 nov" / "5 nov."
+    public var shortDisplay: String { shortDisplay(in: L10n.language) }
+
+    public func shortDisplay(in lang: AppLanguage) -> String {
+        let m = L10n.shortMonthName(month, in: lang)
+        switch lang {
+        case .en: return "\(m) \(day)"
+        case .es, .fr: return "\(day) \(m)"
+        }
     }
 
-    /// "5 de noviembre de 2026"
-    public var longDisplay: String {
-        "\(day) de \(yearMonth.monthName.lowercased()) de \(year)"
+    /// "November 5, 2026" / "5 de noviembre de 2026" / "5 novembre 2026"
+    public var longDisplay: String { longDisplay(in: L10n.language) }
+
+    public func longDisplay(in lang: AppLanguage) -> String {
+        let m = yearMonth.monthName(in: lang)
+        switch lang {
+        case .en: return "\(m) \(day), \(year)"
+        case .es: return "\(day) de \(m.lowercased()) de \(year)"
+        case .fr: return "\(day) \(m.lowercased()) \(year)"
+        }
     }
 }
 

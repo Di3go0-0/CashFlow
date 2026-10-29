@@ -13,7 +13,7 @@ struct FundsView: View {
             let pockets = model.fundReports.filter { $0.fund.isCardPocket }
             Section {
                 if regular.isEmpty {
-                    EmptyHint(text: "Un fondo es un bolsillo con un propósito. Algunos acumulan, otros se gastan en el mes.")
+                    EmptyHint(text: T("A fund is a pocket with a purpose. Some accumulate, others are spent within the month."))
                 }
                 ForEach(regular) { r in
                     NavigationLink(value: r.fund.id!) {
@@ -22,13 +22,13 @@ struct FundsView: View {
                 }
             } header: {
                 HStack {
-                    Text("Fondos")
+                    Text(T("Funds"))
                     Spacer()
                     Text(MoneyFormat.cop(regular.reduce(0) { $0 + $1.balance }))
                 }
             }
             if !pockets.isEmpty {
-                Section("Bolsillos de pago de tarjetas") {
+                Section(T("Credit card payment pockets")) {
                     ForEach(pockets) { r in
                         NavigationLink(value: r.fund.id!) {
                             FundRow(report: r)
@@ -37,7 +37,7 @@ struct FundsView: View {
                 }
             }
         }
-        .navigationTitle("Fondos")
+        .navigationTitle(T("Funds"))
         .navigationDestination(for: Int64.self) { FundDetailView(fundId: $0) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -61,10 +61,10 @@ struct FundRow: View {
                     }
                 }
                 if report.fund.resetsMonthly {
-                    Text("Este mes: \(MoneyFormat.cop(report.remainingInMonth)) de \(MoneyFormat.cop(report.contributedInMonth))")
+                    Text(T("This month: %@ of %@", MoneyFormat.cop(report.remainingInMonth), MoneyFormat.cop(report.contributedInMonth)))
                         .font(.caption).foregroundStyle(.secondary)
                 } else if report.contributedInMonth > 0 {
-                    Text("+\(MoneyFormat.cop(report.contributedInMonth)) este mes")
+                    Text(T("+%@ this month", MoneyFormat.cop(report.contributedInMonth)))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -88,20 +88,20 @@ struct FundDetailView: View {
         if let r = report {
             List {
                 Section {
-                    MoneyRow(title: "Saldo hoy", amount: r.balance, emphasis: true, color: r.balance.balanceColor)
-                    MoneyRow(title: "Aportado en \(model.month.monthName)", amount: r.contributedInMonth)
-                    MoneyRow(title: "Gastado en \(model.month.monthName)", amount: r.spentInMonth)
+                    MoneyRow(title: T("Balance today"), amount: r.balance, emphasis: true, color: r.balance.balanceColor)
+                    MoneyRow(title: T("Contributed in %@", model.month.monthName), amount: r.contributedInMonth)
+                    MoneyRow(title: T("Spent in %@", model.month.monthName), amount: r.spentInMonth)
                     if r.fund.resetsMonthly {
-                        MoneyRow(title: "Queda del mes", amount: r.remainingInMonth, color: r.remainingInMonth < 0 ? .red : .primary)
+                        MoneyRow(title: T("Left this month"), amount: r.remainingInMonth, color: r.remainingInMonth < 0 ? .red : .primary)
                     }
                     if r.fund.initialBalance != 0 {
-                        MoneyRow(title: "Saldo inicial", amount: r.fund.initialBalance)
+                        MoneyRow(title: T("Initial balance"), amount: r.fund.initialBalance)
                     }
                 }
-                Section("Movimientos") {
+                Section(T("Movements")) {
                     let moves = model.snapshot.movements(of: fundId)
                     if moves.isEmpty {
-                        EmptyHint(text: "Sin movimientos todavía.")
+                        EmptyHint(text: T("No movements yet."))
                     }
                     ForEach(moves) { m in
                         HStack {
@@ -115,7 +115,7 @@ struct FundDetailView: View {
                         }
                         .swipeActions(edge: .trailing) {
                             if m.kind == .adjustment {
-                                Button("Borrar", role: .destructive) {
+                                Button(T("Delete"), role: .destructive) {
                                     model.perform { try model.db.deleteAdjustment(id: m.sourceId) }
                                 }
                             }
@@ -128,8 +128,8 @@ struct FundDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button { adjusting = true } label: { Label("Meter o sacar plata", systemImage: "arrow.left.arrow.right") }
-                        Button { editing = true } label: { Label("Editar fondo", systemImage: "pencil") }
+                        Button { adjusting = true } label: { Label(T("Deposit or withdraw"), systemImage: "arrow.left.arrow.right") }
+                        Button { editing = true } label: { Label(T("Edit fund"), systemImage: "pencil") }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -138,7 +138,7 @@ struct FundDetailView: View {
             .sheet(isPresented: $editing) { FundEditView(fund: r.fund) }
             .sheet(isPresented: $adjusting) { FundAdjustmentView(fund: r.fund) }
         } else {
-            ContentUnavailableView("Fondo no encontrado", systemImage: "tray")
+            ContentUnavailableView(T("Fund not found"), systemImage: "tray")
         }
     }
 }
@@ -158,35 +158,35 @@ struct FundEditView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Nombre", text: $fund.name)
-                    MoneyField(title: "Aporte mensual sugerido", amount: $fund.defaultContribution)
+                    TextField(T("Name"), text: $fund.name)
+                    MoneyField(title: T("Suggested monthly contribution"), amount: $fund.defaultContribution)
                     if isNew || fund.canEditInitialBalance(in: model.month) {
-                        MoneyField(title: "Saldo inicial", amount: $fund.initialBalance)
+                        MoneyField(title: T("Initial balance"), amount: $fund.initialBalance)
                     } else {
-                        MoneyRow(title: "Saldo inicial", amount: fund.initialBalance,
-                                 subtitle: "Solo editable en \(fund.createdMonth.displayName). Usa un movimiento manual para ajustar.")
+                        MoneyRow(title: T("Initial balance"), amount: fund.initialBalance,
+                                 subtitle: T("Only editable in %@. Use a manual movement to adjust.", fund.createdMonth.displayName))
                     }
                 }
                 Section {
-                    Toggle("Es ahorro", isOn: $fund.isSavings)
-                    Toggle("Se gasta en el mes", isOn: $fund.resetsMonthly)
+                    Toggle(T("Savings"), isOn: $fund.isSavings)
+                    Toggle(T("Spent within the month"), isOn: $fund.resetsMonthly)
                 } footer: {
-                    Text("Ahorro: sus aportes cuentan como ahorrado en el resumen. Se gasta en el mes: muestra cuánto queda de lo aportado este mes.")
+                    Text(T("Savings: its contributions count as saved in the summary. Spent within the month: shows how much of this month's contribution is left."))
                 }
                 if !isNew && !fund.isCardPocket {
                     Section {
-                        Toggle("Archivado", isOn: $fund.isArchived)
+                        Toggle(T("Archived"), isOn: $fund.isArchived)
                     } footer: {
-                        Text("Un fondo archivado no aparece en listas ni proyecciones. Sus movimientos se conservan.")
+                        Text(T("An archived fund is hidden from lists and plans. Its movements are kept."))
                     }
                 }
             }
-            .navigationTitle(isNew ? "Nuevo fondo" : "Editar fondo")
+            .navigationTitle(isNew ? T("New fund") : T("Edit fund"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button(T("Save")) {
                         var f = fund
                         if isNew {
                             f.sortOrder = model.snapshot.funds.count
@@ -214,33 +214,33 @@ struct FundAdjustmentView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Movimiento", selection: $isIncoming) {
-                    Text("Entra").tag(true)
-                    Text("Sale").tag(false)
+                Picker(T("Movement"), selection: $isIncoming) {
+                    Text(T("Deposit")).tag(true)
+                    Text(T("Withdraw")).tag(false)
                 }
                 .pickerStyle(.segmented)
-                MoneyField(title: "Monto", amount: $amount)
-                TextField("Razón", text: $reason)
-                DayDatePicker(title: "Fecha", day: $date)
+                MoneyField(title: T("Amount"), amount: $amount)
+                TextField(T("Reason"), text: $reason)
+                DayDatePicker(title: T("Date"), day: $date)
                 Section {
-                    Picker(isIncoming ? "Viene de" : "Va para", selection: $counterpart) {
-                        Text("Fuera de la app").tag(Int64?.none)
+                    Picker(isIncoming ? T("Comes from") : T("Goes to"), selection: $counterpart) {
+                        Text(T("Outside the app")).tag(Int64?.none)
                         ForEach(model.activeFunds.filter { $0.id != fund.id }) { f in
                             Text(f.name).tag(Int64?.some(f.id!))
                         }
                     }
                 } footer: {
-                    Text("Si eliges otro fondo, el movimiento contrario se registra allá automáticamente.")
+                    Text(T("If you pick another fund, the opposite movement is recorded there automatically."))
                 }
-                MoneyRow(title: "Saldo hoy", amount: model.snapshot.balance(of: fund.id!, asOf: model.today))
+                MoneyRow(title: T("Balance today"), amount: model.snapshot.balance(of: fund.id!, asOf: model.today))
             }
             .navigationTitle(fund.name)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { date = model.defaultDate }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button(T("Save")) {
                         let signed = isIncoming ? amount : -amount
                         let ok = model.perform {
                             try model.db.adjustFund(fund.id!, amount: signed, date: date, reason: reason, counterpartFundId: counterpart)

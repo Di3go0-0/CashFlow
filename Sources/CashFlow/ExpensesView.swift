@@ -3,7 +3,6 @@ import SwiftUI
 import GRDB
 import CashFlowCore
 
-/// Qué se muestra en la pestaña Gastos.
 enum ExpenseFilter: Hashable {
     case all
     case noCard
@@ -43,9 +42,9 @@ struct ExpensesView: View {
         List {
             Section {
                 MonthSwitcher(month: $model.month)
-                Picker("Ver", selection: $filter) {
-                    Text("Todo").tag(ExpenseFilter.all)
-                    Text("Sin tarjeta").tag(ExpenseFilter.noCard)
+                Picker(T("Show"), selection: $filter) {
+                    Text(T("Everything")).tag(ExpenseFilter.all)
+                    Text(T("Without card")).tag(ExpenseFilter.noCard)
                     ForEach(model.activeCards) { c in
                         Text(c.name).tag(ExpenseFilter.card(c.id!))
                     }
@@ -64,11 +63,11 @@ struct ExpensesView: View {
                 let total = monthExpenses.reduce(0) { $0 + $1.amountCOP }
                     + model.activeCards.flatMap { monthCardExpenses($0.id!) }.reduce(0) { $0 + $1.expense.amountCOP }
                 Section {
-                    MoneyRow(title: "Total gastado en \(model.month.monthName)", amount: total, emphasis: true)
+                    MoneyRow(title: T("Total spent in %@", model.month.monthName), amount: total, emphasis: true)
                 }
             }
         }
-        .navigationTitle("Gastos")
+        .navigationTitle(T("Expenses"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showNew = true } label: { Image(systemName: "plus") }
@@ -85,7 +84,7 @@ struct ExpensesView: View {
         Section {
             let items = monthExpenses
             if items.isEmpty {
-                EmptyHint(text: "Transferencias y efectivo de este mes.")
+                EmptyHint(text: T("Transfers and cash this month."))
             }
             ForEach(items) { e in
                 Button { editing = e } label: { ExpenseRow(expense: e) }.tint(.primary)
@@ -96,7 +95,7 @@ struct ExpensesView: View {
             }
         } header: {
             HStack {
-                Text("Sin tarjeta")
+                Text(T("Without card"))
                 Spacer()
                 Text(MoneyFormat.cop(monthExpenses.reduce(0) { $0 + $1.amountCOP }))
             }
@@ -107,7 +106,7 @@ struct ExpensesView: View {
         Section {
             let items = monthCardExpenses(card.id!)
             if items.isEmpty {
-                EmptyHint(text: "Sin gastos con \(card.name) este mes.")
+                EmptyHint(text: T("No expenses with %@ this month.", card.name))
             }
             ForEach(items) { s in
                 Button { editingCard = s.expense } label: { CardExpenseRow(status: s, showAllocations: true) }.tint(.primary)
@@ -133,7 +132,7 @@ struct ExpenseRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(expense.reason.isEmpty ? "Sin descripción" : expense.reason)
+                Text(expense.reason.isEmpty ? T("No description") : expense.reason)
                 Text("\(expense.date.shortDisplay) · \(model.snapshot.expenseSourceName(expense))").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -147,7 +146,7 @@ struct ExpenseRow: View {
     }
 }
 
-/// Gasto nuevo: sin tarjeta o con una tarjeta concreta.
+/// Gasto nuevo: sin tarjeta o con una tarjeta de crédito.
 struct NewExpenseSheet: View {
     @Environment(AppModel.self) private var model
     var initialCardId: Int64?
@@ -155,9 +154,9 @@ struct NewExpenseSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Medio de pago", selection: $withCard) {
-                Text("Transferencia o efectivo").tag(false)
-                Text("Tarjeta de crédito").tag(true)
+            Picker(T("Payment method"), selection: $withCard) {
+                Text(T("Transfer or cash")).tag(false)
+                Text(T("Credit card")).tag(true)
             }
             .pickerStyle(.segmented)
             .padding()
@@ -189,16 +188,16 @@ struct ExpenseEditView: View {
             Form {
                 Section {
                     CurrencyPicker(currency: $expense.currency)
-                    MoneyField(title: "Monto", amount: $expense.amount, currency: expense.currency)
+                    MoneyField(title: T("Amount"), amount: $expense.amount, currency: expense.currency)
                     if expense.currency == .usd {
                         RateField(rate: $expense.rate)
                             .onAppear { if expense.rate == nil { expense.rate = model.rate } }
-                        MoneyRow(title: "En pesos", amount: Exchange.toCOP(amountMinor: expense.amount, currency: .usd, rate: expense.rate))
+                        MoneyRow(title: T("In pesos"), amount: Exchange.toCOP(amountMinor: expense.amount, currency: .usd, rate: expense.rate))
                     }
                 }
                 Section {
-                    TextField("Razón", text: $expense.reason)
-                    DayDatePicker(title: "Fecha", day: $expense.date)
+                    TextField(T("Reason"), text: $expense.reason)
+                    DayDatePicker(title: T("Date"), day: $expense.date)
                     SourcePicker(source: $source, currentConsumableId: expense.consumableId)
                         .onChange(of: source) { _, new in
                             expense.fundId = new.fundId
@@ -212,16 +211,16 @@ struct ExpenseEditView: View {
                     SourceBalanceRow(source: source)
                 }
             }
-            .navigationTitle(isNew ? "Nuevo gasto" : "Gasto")
+            .navigationTitle(isNew ? T("New expense") : T("Expense"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if isNew { expense.date = model.defaultDate }
                 source = MoneySource(fundId: expense.fundId, fromConsumables: expense.fromConsumables, consumableId: expense.consumableId)
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button(T("Save")) {
                         let e = expense
                         if model.perform({ try model.db.saveExpense(e) }) { dismiss() }
                     }

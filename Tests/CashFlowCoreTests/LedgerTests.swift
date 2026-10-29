@@ -45,8 +45,8 @@ struct Fixture {
         )
         try f.db.saveIncome(octIncome, asTemplate: true)
 
-        try f.db.startMonth(f.nov)
-        try f.db.startMonth(f.nov) // idempotente
+        try f.db.startMonth(f.nov, fromTemplates: true)
+        try f.db.startMonth(f.nov, fromTemplates: true) // idempotente
 
         let snap = try f.db.snapshot()
         #expect(snap.projections.count == 1)
@@ -67,8 +67,8 @@ struct Fixture {
 
     @Test func fundBalancesIgnoreFutureMonths() throws {
         let f = try Fixture()
-        try f.db.startMonth(f.nov)
-        try f.db.startMonth(f.dec) // mes futuro ya iniciado
+        try f.db.startMonth(f.nov, fromTemplates: true)
+        try f.db.startMonth(f.dec, fromTemplates: true) // mes futuro ya iniciado
 
         let snap = try f.db.snapshot()
         let today = DayDate(year: 2026, month: 11, day: 10)
@@ -83,7 +83,7 @@ struct Fixture {
 
     @Test func monthSummaryAndRemaining() throws {
         let f = try Fixture()
-        try f.db.startMonth(f.nov)
+        try f.db.startMonth(f.nov, fromTemplates: true)
         let income0 = Income(sourceId: f.linktic.id!, month: f.nov, date: f.nov.firstDay, netAmount: 4_497_000)
         try f.db.write { db in
             try Income.filter(Column("month") == f.nov).deleteAll(db)
@@ -121,7 +121,7 @@ struct Fixture {
 
     @Test func cardExpenseAllocationsAndPayment() throws {
         let f = try Fixture()
-        try f.db.startMonth(f.nov)
+        try f.db.startMonth(f.nov, fromTemplates: true)
         let pocket = try f.db.snapshot().pocket(of: f.unica.id!)!
 
         try f.db.write { db in

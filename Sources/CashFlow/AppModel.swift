@@ -10,13 +10,24 @@ final class AppModel {
     var month: YearMonth = .current()
     var errorMessage: String?
 
+    /// Idioma de la interfaz. Inglés por defecto.
+    var language: AppLanguage {
+        didSet {
+            L10n.language = language
+            try? db.setSetting(Setting.languageKey, language.rawValue)
+        }
+    }
+
     /// TRM vigente: manual si está definida, si no la última descargada.
     private(set) var rate: Double?
-    private(set) var rateSource = "Sin tasa"
+    private(set) var rateSource = ""
     var isRefreshingRate = false
 
     init(db: AppDatabase) {
         self.db = db
+        let saved = (try? db.setting(Setting.languageKey)).flatMap { $0 }.flatMap(AppLanguage.init(rawValue:))
+        language = saved ?? .en
+        L10n.language = language
         reload()
     }
 
@@ -24,7 +35,7 @@ final class AppModel {
         do {
             self.init(db: try AppDatabase.onDisk())
         } catch {
-            fatalError("No se pudo abrir la base de datos: \(error)")
+            fatalError("Could not open the database: \(error)")
         }
     }
 
@@ -45,7 +56,7 @@ final class AppModel {
         }
     }
 
-    /// Lo que se edita en el mes en curso actualiza las plantillas de los meses futuros.
+    /// Lo que se edita en el mes en curso también actualiza los montos sugeridos.
     var editsTemplate: Bool { month == .current() }
     var isCurrentMonth: Bool { month == .current() }
     var isFutureMonth: Bool { month > .current() }
@@ -54,7 +65,6 @@ final class AppModel {
         errorMessage = String(describing: error)
     }
 
-    /// Escribe en la base de datos y recarga. Devuelve false si falló.
     @discardableResult
     func write(_ block: (Database) throws -> Void) -> Bool {
         do {
@@ -67,7 +77,6 @@ final class AppModel {
         }
     }
 
-    /// Ejecuta una operación compuesta y recarga.
     @discardableResult
     func perform(_ block: () throws -> Void) -> Bool {
         do {
@@ -87,14 +96,15 @@ final class AppModel {
     var regularFundReports: [FundReport] { fundReports.filter { !$0.fund.isCardPocket } }
     var cardStatuses: [CardStatus] { snapshot.cardStatuses(asOf: today) }
     var projection: Projection? { snapshot.projection(for: month) }
+    var previousProjection: Projection? { snapshot.projection(for: month.previous) }
     var activeFunds: [Fund] { snapshot.funds.filter { !$0.isArchived && !$0.isCardPocket } }
     var activeSources: [IncomeSource] { snapshot.sources.filter { !$0.isArchived } }
     var activeCards: [Card] { snapshot.cards.filter { !$0.isArchived } }
     var monthIncomes: [IncomeDetail] { snapshot.incomes.filter { $0.income.month == month } }
 
-    func fundName(_ id: Int64?) -> String { snapshot.fund(id)?.name ?? "Saldo extra" }
-    func cardName(_ id: Int64?) -> String { snapshot.card(id)?.name ?? "Tarjeta" }
-    func sourceName(_ id: Int64?) -> String { snapshot.source(id)?.name ?? "Fuente" }
+    func fundName(_ id: Int64?) -> String { snapshot.fund(id)?.name ?? T("Extra balance") }
+    func cardName(_ id: Int64?) -> String { snapshot.card(id)?.name ?? T("Credit card") }
+    func sourceName(_ id: Int64?) -> String { snapshot.source(id)?.name ?? T("Source") }
 
     func contributions(of p: Projection) -> [Contribution] {
         snapshot.contributions.filter { $0.projectionId == p.id }
@@ -104,11 +114,31 @@ final class AppModel {
         snapshot.commitments.filter { $0.projectionId == p.id && $0.kind == kind }
     }
 
+    func consumables() -> [Consumable] { snapshot.consumables(for: month) }
+
     func startMonth() {
         perform { try db.startMonth(month) }
     }
 
-    func consumables() -> [Consumable] { snapshot.consumables(for: month) }
+    func deleteMonth() {
+        guard isFutureMonth else { return }
+        perform { try db.deleteMonth(month) }
+    }
+
+    func bringFromPreviousMonth(_ category: ProjectionCategory) {
+        perform { try db.copyFromPreviousMonth(category, to: month) }
+    }
+
+    /// Cuántos ítems de una categoría tiene el mes anterior, para habilitar el botón de traer.
+    func previousMonthCount(_ category: ProjectionCategory) -> Int {
+        guard let p = previousProjection else { return 0 }
+        switch category {
+        case .contributions: return contributions(of: p).count
+        case .consumables: return snapshot.consumables(for: month.previous).count
+        case .debts: return commitments(of: p, kind: .debt).count
+        case .necessary: return commitments(of: p, kind: .necessary).count
+        }
+    }
 
     /// Primer fondo activo que todavía no tiene aporte este mes.
     var nextFundWithoutContribution: Fund? {
@@ -128,17 +158,17 @@ final class AppModel {
         do {
             if let m = try db.setting(Setting.manualRateKey), let v = Double(m) {
                 rate = v
-                rateSource = "Manual"
+                rateSource = T("Manual")
                 return
             }
             if let c = try db.setting(Setting.cachedRateKey), let v = Double(c) {
                 rate = v
                 let d = try db.setting(Setting.cachedRateDateKey) ?? ""
-                rateSource = "Descargada el \(d)"
+                rateSource = T("Downloaded on %@", d)
                 return
             }
             rate = nil
-            rateSource = "Sin tasa"
+            rateSource = T("No rate yet")
         } catch {
             report(error)
         }

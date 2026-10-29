@@ -83,6 +83,19 @@ public enum MoneyFormat {
         }
     }
 
+    /// Forma corta para ejes de gráficas: `$1,2M`, `$850k`, `$900`.
+    public static func compact(_ pesos: Int64) -> String {
+        let sign = pesos < 0 ? "-" : ""
+        let v = Double(Swift.abs(pesos))
+        func trim(_ x: Double) -> String {
+            let s = String(format: "%.1f", x).replacingOccurrences(of: ".", with: ",")
+            return s.hasSuffix(",0") ? String(s.dropLast(2)) : s
+        }
+        if v >= 1_000_000 { return "\(sign)$\(trim(v / 1_000_000))M" }
+        if v >= 1_000 { return "\(sign)$\(trim(v / 1_000))k" }
+        return "\(sign)$\(Int64(v))"
+    }
+
     /// Texto editable sin símbolo: `1250000` o `12,50`.
     public static func plain(minor: Int64, currency: Currency) -> String {
         switch currency {

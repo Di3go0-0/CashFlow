@@ -1,6 +1,10 @@
 import Foundation
 import GRDB
 
+public enum ProjectionCategory: Sendable {
+    case contributions, consumables, debts, necessary
+}
+
 /// Operaciones compuestas sobre la base de datos.
 ///
 /// Regla de plantillas: lo que se edita en el mes en curso (`asTemplate == true`) actualiza la plantilla
@@ -18,7 +22,7 @@ public extension AppDatabase {
         try write { db in
             var c = card
             try c.insert(db)
-            var pocket = Fund(name: "Pago \(c.name)", cardId: c.id, sortOrder: 1_000, createdMonth: month)
+            var pocket = Fund(name: L10n.tr("%@ payment", c.name), cardId: c.id, sortOrder: 1_000, createdMonth: month)
             try pocket.insert(db)
             return c
         }
@@ -26,11 +30,13 @@ public extension AppDatabase {
 
     // MARK: Mes
 
-    /// Instancia un mes a partir de las plantillas: aportes sugeridos de fondos, cuotas activas,
-    /// consumibles y fuentes recurrentes como ingresos pendientes.
+    /// Instancia un mes: crea la proyección, genera las cuotas activas de compras a crédito y
+    /// precarga las fuentes recurrentes como ingresos pendientes. Aportes, consumibles y compromisos
+    /// se traen después, por categoría, desde el mes anterior (`copyFromPreviousMonth`).
+    /// Con `fromTemplates` también instancia desde las plantillas (lo usan los tests).
     /// Idempotente: si la proyección ya existe solo completa los ingresos recurrentes que falten.
     @discardableResult
-    func startMonth(_ month: YearMonth) throws -> Projection {
+    func startMonth(_ month: YearMonth, fromTemplates: Bool = false) throws -> Projection {
         try write { db in
             var projection: Projection
             if let existing = try Projection.filter(Column("month") == month).fetchOne(db) {
@@ -39,26 +45,28 @@ public extension AppDatabase {
                 projection = Projection(month: month)
                 try projection.insert(db)
 
-                let funds = try Fund.filter(Column("isArchived") == false && Column("cardId") == nil).fetchAll(db)
-                for f in funds where f.defaultContribution > 0 {
-                    var c = Contribution(projectionId: projection.id!, fundId: f.id!, amount: f.defaultContribution, date: month.firstDay)
-                    try c.insert(db)
-                }
                 for p in try InstallmentPlan.fetchAll(db) {
                     guard let n = p.installmentNumber(in: month) else { continue }
                     var cm = Commitment(projectionId: projection.id!, kind: .debt, name: "\(p.name) (\(n)/\(p.installmentCount))",
                                         amount: p.monthlyAmount, date: month.firstDay, installmentPlanId: p.id)
                     try cm.insert(db)
                 }
-                let templates = try ConsumableTemplate.filter(Column("isArchived") == false).order(Column("sortOrder")).fetchAll(db)
-                for t in templates {
-                    var item = Consumable(projectionId: projection.id!, templateId: t.id, name: t.name, amount: t.amount, sortOrder: t.sortOrder)
-                    try item.insert(db)
-                }
-                let commitmentTemplates = try CommitmentTemplate.filter(Column("isArchived") == false).order(Column("sortOrder")).fetchAll(db)
-                for t in commitmentTemplates {
-                    var cm = Commitment(projectionId: projection.id!, kind: t.kind, name: t.name, amount: t.amount, date: month.firstDay, templateId: t.id)
-                    try cm.insert(db)
+                if fromTemplates {
+                    let funds = try Fund.filter(Column("isArchived") == false && Column("cardId") == nil).fetchAll(db)
+                    for f in funds where f.defaultContribution > 0 {
+                        var c = Contribution(projectionId: projection.id!, fundId: f.id!, amount: f.defaultContribution, date: month.firstDay)
+                        try c.insert(db)
+                    }
+                    let templates = try ConsumableTemplate.filter(Column("isArchived") == false).order(Column("sortOrder")).fetchAll(db)
+                    for t in templates {
+                        var item = Consumable(projectionId: projection.id!, templateId: t.id, name: t.name, amount: t.amount, sortOrder: t.sortOrder)
+                        try item.insert(db)
+                    }
+                    let commitmentTemplates = try CommitmentTemplate.filter(Column("isArchived") == false).order(Column("sortOrder")).fetchAll(db)
+                    for t in commitmentTemplates {
+                        var cm = Commitment(projectionId: projection.id!, kind: t.kind, name: t.name, amount: t.amount, date: month.firstDay, templateId: t.id)
+                        try cm.insert(db)
+                    }
                 }
             }
 
@@ -79,6 +87,68 @@ public extension AppDatabase {
                 }
             }
             return projection
+        }
+    }
+
+    /// Deshace la iniciación de un mes: borra su proyección con todo lo que cuelga de ella y sus ingresos.
+    /// Pensado solo para meses futuros; el llamador lo valida.
+    func deleteMonth(_ month: YearMonth) throws {
+        try write { db in
+            if let p = try Projection.filter(Column("month") == month).fetchOne(db) {
+                try Consumable.filter(Column("projectionId") == p.id!).deleteAll(db)
+                try Contribution.filter(Column("projectionId") == p.id!).deleteAll(db)
+                try Commitment.filter(Column("projectionId") == p.id!).deleteAll(db)
+                try p.delete(db)
+            }
+            try Income.filter(Column("month") == month).deleteAll(db)
+        }
+    }
+
+    /// Trae una categoría de la proyección del mes anterior al mes dado. No duplica lo que ya exista
+    /// (mismo fondo, o mismo nombre). Las cuotas de planes se recalculan para el mes destino.
+    func copyFromPreviousMonth(_ category: ProjectionCategory, to month: YearMonth) throws {
+        try write { db in
+            let source = month.previous
+            guard let src = try Projection.filter(Column("month") == source).fetchOne(db) else { return }
+            var dst: Projection
+            if let existing = try Projection.filter(Column("month") == month).fetchOne(db) {
+                dst = existing
+            } else {
+                dst = Projection(month: month)
+                try dst.insert(db)
+            }
+            switch category {
+            case .contributions:
+                let existing = Set(try Contribution.filter(Column("projectionId") == dst.id!).fetchAll(db).map(\.fundId))
+                for c in try Contribution.filter(Column("projectionId") == src.id!).fetchAll(db) where !existing.contains(c.fundId) {
+                    guard let fund = try Fund.fetchOne(db, id: c.fundId), !fund.isArchived else { continue }
+                    var copy = Contribution(projectionId: dst.id!, fundId: c.fundId, amount: c.amount, date: month.firstDay)
+                    try copy.insert(db)
+                }
+            case .consumables:
+                let existing = Set(try Consumable.filter(Column("projectionId") == dst.id!).fetchAll(db).map { $0.name.lowercased() })
+                for c in try Consumable.filter(Column("projectionId") == src.id!).order(Column("sortOrder")).fetchAll(db)
+                    where !existing.contains(c.name.lowercased()) {
+                    var copy = Consumable(projectionId: dst.id!, templateId: c.templateId, name: c.name, amount: c.amount, sortOrder: c.sortOrder)
+                    try copy.insert(db)
+                }
+            case .debts, .necessary:
+                let kind: CommitmentKind = category == .debts ? .debt : .necessary
+                let existing = Set(try Commitment.filter(Column("projectionId") == dst.id! && Column("kind") == kind).fetchAll(db).map { $0.name.lowercased() })
+                let existingPlans = Set(try Commitment.filter(Column("projectionId") == dst.id!).fetchAll(db).compactMap(\.installmentPlanId))
+                for c in try Commitment.filter(Column("projectionId") == src.id! && Column("kind") == kind).fetchAll(db) {
+                    if let planId = c.installmentPlanId {
+                        guard !existingPlans.contains(planId), let plan = try InstallmentPlan.fetchOne(db, id: planId),
+                              let n = plan.installmentNumber(in: month) else { continue }
+                        var copy = Commitment(projectionId: dst.id!, kind: .debt, name: "\(plan.name) (\(n)/\(plan.installmentCount))",
+                                              amount: plan.monthlyAmount, date: month.firstDay, installmentPlanId: planId)
+                        try copy.insert(db)
+                    } else if !existing.contains(c.name.lowercased()) {
+                        var copy = Commitment(projectionId: dst.id!, kind: kind, name: c.name, amount: c.amount, date: month.firstDay, templateId: c.templateId)
+                        try copy.insert(db)
+                    }
+                }
+            }
         }
     }
 

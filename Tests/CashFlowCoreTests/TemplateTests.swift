@@ -32,7 +32,7 @@ import GRDB
             bonuses: [.init(incomeId: 0, name: "Auxilio", amount: 232_489)]
         )
         try f.db.saveIncome(base, asTemplate: true)
-        try f.db.startMonth(f.nov)
+        try f.db.startMonth(f.nov, fromTemplates: true)
         var nov = try f.db.snapshot().incomes.first { $0.income.month == f.nov }!
         #expect(nov.deductions.map(\.name) == ["Salud"])
         #expect(nov.bonuses.map(\.amount) == [232_489])
@@ -40,7 +40,7 @@ import GRDB
         // Editar noviembre como mes futuro (sin plantilla) no cambia diciembre.
         nov.bonuses = []
         try f.db.saveIncome(nov, asTemplate: false)
-        try f.db.startMonth(f.dec)
+        try f.db.startMonth(f.dec, fromTemplates: true)
         let dec = try f.db.snapshot().incomes.first { $0.income.month == f.dec }!
         #expect(dec.bonuses.count == 1)
 
@@ -49,7 +49,7 @@ import GRDB
         dec2.deductions.append(.init(incomeId: 0, name: "Pensión", kind: .percent, value: 400))
         try f.db.saveIncome(dec2, asTemplate: true)
         let jan = YearMonth(year: 2027, month: 1)
-        try f.db.startMonth(jan)
+        try f.db.startMonth(jan, fromTemplates: true)
         let janIncome = try f.db.snapshot().incomes.first { $0.income.month == jan }!
         #expect(janIncome.deductions.map(\.name) == ["Salud", "Pensión"])
         // Noviembre sigue igual.
@@ -59,12 +59,12 @@ import GRDB
 
     @Test func contributionAsTemplateUpdatesFundDefault() throws {
         let f = try Fixture()
-        let p = try f.db.startMonth(f.nov)
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
         let c = Contribution(projectionId: p.id!, fundId: f.moto.id!, amount: 400_000, date: f.nov.firstDay)
         try f.db.saveContribution(c, asTemplate: true)
         #expect(try f.db.snapshot().fund(f.moto.id)?.defaultContribution == 400_000)
 
-        try f.db.startMonth(f.dec)
+        try f.db.startMonth(f.dec, fromTemplates: true)
         let decContrib = try f.db.snapshot().contributions.filter { $0.fundId == f.moto.id && f.dec.contains($0.date) }
         #expect(decContrib.map(\.amount) == [400_000])
 
@@ -78,7 +78,7 @@ import GRDB
 
     @Test func consumablesTemplateAndSummary() throws {
         let f = try Fixture()
-        let p = try f.db.startMonth(f.nov)
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
         try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Spotify", amount: 31_000), asTemplate: true)
         try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Plan celular", amount: 50_000), asTemplate: true)
         var snap = try f.db.snapshot()
@@ -95,7 +95,7 @@ import GRDB
         #expect(s.spent == 31_000)
 
         // Diciembre se instancia con la plantilla; borrar ahí no archiva la plantilla.
-        try f.db.startMonth(f.dec)
+        try f.db.startMonth(f.dec, fromTemplates: true)
         let decItems = try f.db.snapshot().consumables(for: f.dec)
         #expect(decItems.map(\.name).sorted() == ["Plan celular", "Spotify"])
         #expect(decItems.allSatisfy { !$0.isPaid })
@@ -105,13 +105,13 @@ import GRDB
         // Borrar como plantilla archiva y enero ya no lo trae.
         let novItems = try f.db.snapshot().consumables(for: f.nov)
         try f.db.deleteConsumables(ids: [novItems.first { $0.name == "Spotify" }!.id!], asTemplate: true)
-        try f.db.startMonth(YearMonth(year: 2027, month: 1))
+        try f.db.startMonth(YearMonth(year: 2027, month: 1), fromTemplates: true)
         #expect(try f.db.snapshot().consumables(for: YearMonth(year: 2027, month: 1)).map(\.name) == ["Plan celular"])
     }
 
     @Test func fundAdjustmentsAndTransfers() throws {
         let f = try Fixture()
-        try f.db.startMonth(f.nov)
+        try f.db.startMonth(f.nov, fromTemplates: true)
         let d = DayDate(year: 2026, month: 11, day: 8)
         try f.db.adjustFund(f.moto.id!, amount: 100_000, date: d, reason: "Plata extra")
         try f.db.adjustFund(f.moto.id!, amount: -50_000, date: d, reason: "Pasar a compras", counterpartFundId: f.compras.id!)
@@ -135,7 +135,7 @@ import GRDB
 
     @Test func allocationFromConsumableMarksItPaidWithoutDoubleCounting() throws {
         let f = try Fixture()
-        let p = try f.db.startMonth(f.nov)
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
         try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Música", amount: 31_000), asTemplate: true)
         let item = try f.db.snapshot().consumables(for: f.nov)[0]
         let expense = try f.db.write { db -> CardExpense in
@@ -165,7 +165,7 @@ import GRDB
 
     @Test func consumablesPoolTracksSpentAndUnpaidSeparately() throws {
         let f = try Fixture()
-        let p = try f.db.startMonth(f.nov)
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
         try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Gimnasio", amount: 90_000), asTemplate: true)
         try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Parqueadero", amount: 50_000), asTemplate: true)
         let gym = try f.db.snapshot().consumables(for: f.nov).first { $0.name == "Gimnasio" }!
@@ -212,12 +212,12 @@ import GRDB
 
     @Test func commitmentTemplates() throws {
         let f = try Fixture()
-        let p = try f.db.startMonth(f.nov)
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
         try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Ayuda familiar", amount: 300_000, date: f.nov.firstDay), asTemplate: true)
         try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Salida grande", amount: 100_000, date: f.nov.firstDay), asTemplate: false)
         #expect(try f.db.snapshot().commitmentTemplates.map(\.name) == ["Ayuda familiar"])
 
-        try f.db.startMonth(f.dec)
+        try f.db.startMonth(f.dec, fromTemplates: true)
         var dec = try f.db.snapshot().commitments.filter { f.dec.contains($0.date) }
         #expect(dec.map(\.name) == ["Ayuda familiar"])
         #expect(try f.db.snapshot().monthSummary(f.dec).necessary == 300_000)
@@ -227,8 +227,67 @@ import GRDB
         #expect(try f.db.snapshot().commitmentTemplates.filter { !$0.isArchived }.count == 1)
         let nov = try f.db.snapshot().commitments.first { $0.name == "Ayuda familiar" && f.nov.contains($0.date) }!
         try f.db.deleteCommitments(ids: [nov.id!], asTemplate: true)
-        try f.db.startMonth(YearMonth(year: 2027, month: 1))
+        try f.db.startMonth(YearMonth(year: 2027, month: 1), fromTemplates: true)
         dec = try f.db.snapshot().commitments.filter { YearMonth(year: 2027, month: 1).contains($0.date) }
         #expect(dec.isEmpty)
+    }
+
+    @Test func plainStartMonthOnlyBringsInstallmentsAndRecurringIncome() throws {
+        let f = try Fixture()
+        try f.db.write { db in
+            var p = InstallmentPlan(name: "Treadmill", totalAmount: 529_000, installmentCount: 6, cardId: f.unica.id!, startMonth: YearMonth(year: 2026, month: 9))
+            try p.insert(db)
+        }
+        try f.db.startMonth(f.nov)
+        let snap = try f.db.snapshot()
+        #expect(snap.contributions.isEmpty)
+        #expect(snap.consumables.isEmpty)
+        #expect(snap.commitments.map(\.name) == ["Treadmill (3/6)"])
+        #expect(snap.incomes.filter { $0.income.month == f.nov }.count == 1)
+    }
+
+    @Test func copyCategoriesFromPreviousMonthWithoutDuplicates() throws {
+        let f = try Fixture()
+        let oct = YearMonth(year: 2026, month: 10)
+        let p = try f.db.startMonth(oct, fromTemplates: true)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Music", amount: 31_000), asTemplate: false)
+        try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Family", amount: 300_000, date: oct.firstDay), asTemplate: false)
+
+        try f.db.startMonth(f.nov)
+        let novP = try f.db.snapshot().projection(for: f.nov)!
+        try f.db.saveContribution(Contribution(projectionId: novP.id!, fundId: f.moto.id!, amount: 100_000, date: f.nov.firstDay), asTemplate: false)
+
+        try f.db.copyFromPreviousMonth(.contributions, to: f.nov)
+        try f.db.copyFromPreviousMonth(.contributions, to: f.nov)
+        try f.db.copyFromPreviousMonth(.consumables, to: f.nov)
+        try f.db.copyFromPreviousMonth(.necessary, to: f.nov)
+        try f.db.copyFromPreviousMonth(.debts, to: f.nov)
+
+        let snap = try f.db.snapshot()
+        let novContribs = snap.contributions.filter { $0.projectionId == novP.id }
+        #expect(novContribs.count == 3)
+        #expect(novContribs.first { $0.fundId == f.moto.id }?.amount == 100_000)
+        #expect(snap.consumables(for: f.nov).map(\.name) == ["Music"])
+        #expect(snap.consumables(for: f.nov).allSatisfy { !$0.isPaid })
+        #expect(snap.commitments.filter { $0.projectionId == novP.id }.map(\.name) == ["Family"])
+    }
+
+    @Test func deleteMonthRemovesEverythingOfThatMonth() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov, fromTemplates: true)
+        try f.db.startMonth(f.dec, fromTemplates: true)
+        try f.db.deleteMonth(f.dec)
+        let snap = try f.db.snapshot()
+        #expect(snap.projection(for: f.dec) == nil)
+        #expect(snap.incomes.filter { $0.income.month == f.dec }.isEmpty)
+        #expect(snap.contributions.filter { f.dec.contains($0.date) }.isEmpty)
+        #expect(snap.projection(for: f.nov) != nil)
+    }
+
+    @Test func localizedDates() {
+        let d = DayDate(year: 2026, month: 11, day: 5)
+        #expect(d.shortDisplay(in: .en) == "Nov 5" && d.longDisplay(in: .en) == "November 5, 2026" && d.yearMonth.displayName(in: .en) == "November 2026")
+        #expect(d.shortDisplay(in: .es) == "5 nov" && d.longDisplay(in: .es) == "5 de noviembre de 2026")
+        #expect(d.longDisplay(in: .fr) == "5 novembre 2026")
     }
 }

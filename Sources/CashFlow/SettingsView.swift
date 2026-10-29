@@ -13,9 +13,20 @@ struct SettingsView: View {
     @State private var pendingImport: Data?
 
     var body: some View {
+        @Bindable var model = model
         List {
+            Section(T("Language")) {
+                Picker(T("Language"), selection: $model.language) {
+                    ForEach(AppLanguage.allCases, id: \.self) { l in
+                        Text(l.displayName).tag(l)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+
             Section {
-                LabeledContent("TRM vigente") {
+                LabeledContent(T("Current rate")) {
                     Text(model.rate.map { String(format: "%.2f", $0) } ?? "—").monospacedDigit()
                 }
                 Text(model.rateSource).font(.caption).foregroundStyle(.secondary)
@@ -25,62 +36,62 @@ struct SettingsView: View {
                     if model.isRefreshingRate {
                         ProgressView()
                     } else {
-                        Label("Actualizar desde internet", systemImage: "arrow.clockwise")
+                        Label(T("Update from the internet"), systemImage: "arrow.clockwise")
                     }
                 }
                 .disabled(model.isRefreshingRate)
                 HStack {
-                    TextField("TRM manual", text: $manualText).keyboardType(.decimalPad)
-                    Button("Fijar") {
+                    TextField(T("Manual rate"), text: $manualText).keyboardType(.decimalPad)
+                    Button(T("Set")) {
                         model.setManualRate(Double(manualText.replacingOccurrences(of: ",", with: ".")))
                         manualText = ""
                     }
                     .disabled(Double(manualText.replacingOccurrences(of: ",", with: ".")) == nil)
                 }
-                if model.rateSource == "Manual" {
-                    Button("Quitar TRM manual", role: .destructive) { model.setManualRate(nil) }
+                if model.rateSource == T("Manual") {
+                    Button(T("Remove manual rate"), role: .destructive) { model.setManualRate(nil) }
                 }
             } header: {
-                Text("Dólar")
+                Text(T("US dollar"))
             } footer: {
-                Text("La TRM se guarda en cada gasto en USD al registrarlo. Cambiarla después no altera el histórico.")
+                Text(T("The rate is stored in each USD expense when you record it. Changing it later does not alter history."))
             }
 
-            Section("Catálogos") {
-                NavigationLink("Fuentes de ingreso") { IncomeSourcesView() }
-                NavigationLink("Compras a cuotas") { PlansView() }
+            Section(T("Catalogs")) {
+                NavigationLink(T("Income sources")) { IncomeSourcesView() }
+                NavigationLink(T("Installment purchases")) { PlansView() }
             }
 
             Section {
                 Button {
                     prepareExport()
                 } label: {
-                    Label("Preparar respaldo", systemImage: "square.and.arrow.up")
+                    Label(T("Prepare backup"), systemImage: "square.and.arrow.up")
                 }
                 if let exportURL {
                     ShareLink(item: exportURL) {
-                        Label("Compartir \(exportURL.lastPathComponent)", systemImage: "doc")
+                        Label(T("Share %@", exportURL.lastPathComponent), systemImage: "doc")
                     }
                 }
                 Button {
                     showImporter = true
                 } label: {
-                    Label("Importar respaldo", systemImage: "square.and.arrow.down")
+                    Label(T("Import backup"), systemImage: "square.and.arrow.down")
                 }
             } header: {
-                Text("Respaldo")
+                Text(T("Backup"))
             } footer: {
-                Text("El respaldo es un archivo JSON con todos los datos. Importar reemplaza todo lo que hay en la app.")
+                Text(T("The backup is a JSON file with all the data. Importing replaces everything in the app."))
             }
 
-            Section("Acerca de") {
-                LabeledContent("Versión", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
+            Section(T("About")) {
+                LabeledContent(T("Version"), value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
             }
         }
-        .navigationTitle("Ajustes")
+        .navigationTitle(T("Settings"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) { Button(T("Done")) { dismiss() } }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
             switch result {
@@ -96,11 +107,11 @@ struct SettingsView: View {
                 model.report(error)
             }
         }
-        .confirmationDialog("Esto reemplaza todos los datos actuales.", isPresented: Binding(
+        .confirmationDialog(T("This replaces all current data."), isPresented: Binding(
             get: { pendingImport != nil },
             set: { if !$0 { pendingImport = nil } }
         ), titleVisibility: .visible) {
-            Button("Importar y reemplazar", role: .destructive) {
+            Button(T("Import and replace"), role: .destructive) {
                 if let data = pendingImport {
                     model.perform { try model.db.importBackup(data) }
                 }
@@ -130,7 +141,7 @@ struct PlansView: View {
         List {
             let plans = model.snapshot.plans.sorted { $0.startMonth > $1.startMonth }
             if plans.isEmpty {
-                EmptyHint(text: "Una compra a cuotas genera su cuota en la proyección de cada mes mientras esté activa.")
+                EmptyHint(text: T("An installment purchase adds its installment to each month's plan while it is active, and uses up credit card limit until billed."))
             }
             ForEach(plans) { p in
                 Button { editing = p } label: {
@@ -140,7 +151,7 @@ struct PlansView: View {
                             Spacer()
                             MoneyText(amount: p.monthlyAmount)
                         }
-                        Text("\(p.installmentCount) cuotas · \(p.startMonth.displayName) a \(p.endMonth.displayName) · total \(MoneyFormat.cop(p.totalAmount))")
+                        Text(T("%d installments · %@ to %@ · total %@", p.installmentCount, p.startMonth.displayName, p.endMonth.displayName, MoneyFormat.cop(p.totalAmount)))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -151,7 +162,7 @@ struct PlansView: View {
                 model.write { db in try InstallmentPlan.deleteAll(db, ids: ids) }
             }
         }
-        .navigationTitle("Compras a cuotas")
+        .navigationTitle(T("Installment purchases"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -174,24 +185,24 @@ struct PlanEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Nombre", text: $plan.name)
-                MoneyField(title: "Total", amount: $plan.totalAmount)
-                Stepper("Cuotas: \(plan.installmentCount)", value: $plan.installmentCount, in: 1...60)
+                TextField(T("Name"), text: $plan.name)
+                MoneyField(title: T("Total"), amount: $plan.totalAmount)
+                Stepper(T("Installments: %d", plan.installmentCount), value: $plan.installmentCount, in: 1...60)
                 MonthSwitcher(month: $plan.startMonth)
-                Picker("Tarjeta", selection: $plan.cardId) {
-                    Text("Ninguna").tag(Int64?.none)
+                Picker(T("Credit card"), selection: $plan.cardId) {
+                    Text(T("None")).tag(Int64?.none)
                     ForEach(model.activeCards) { c in
                         Text(c.name).tag(Int64?.some(c.id!))
                     }
                 }
-                MoneyRow(title: "Cuota mensual", amount: plan.monthlyAmount, emphasis: true)
+                MoneyRow(title: T("Monthly installment"), amount: plan.monthlyAmount, emphasis: true)
             }
-            .navigationTitle(plan.id == nil ? "Nueva compra a cuotas" : "Compra a cuotas")
+            .navigationTitle(plan.id == nil ? T("New installment purchase") : T("Installment purchase"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button(T("Save")) {
                         let p = plan
                         if model.write({ db in var p = p; try p.save(db) }) { dismiss() }
                     }

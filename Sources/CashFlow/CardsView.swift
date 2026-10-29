@@ -12,7 +12,7 @@ struct CardsView: View {
             let cards = model.cardStatuses
             if cards.isEmpty {
                 Section {
-                    EmptyHint(text: "Agrega cada tarjeta con su cupo, día de corte y día de pago. Cada una tendrá su propio bolsillo de pago.")
+                    EmptyHint(text: T("Add each credit card with its limit, closing day and payment day. Each one gets its own payment pocket."))
                 }
             }
             ForEach(cards) { st in
@@ -21,7 +21,7 @@ struct CardsView: View {
                 }
             }
         }
-        .navigationTitle("Tarjetas")
+        .navigationTitle(T("Credit cards"))
         .navigationDestination(for: Int64.self) { CardDetailView(cardId: $0) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -47,31 +47,31 @@ struct CardEditView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Nombre", text: $card.name)
-                    MoneyField(title: "Cupo", amount: $card.creditLimit)
+                    TextField(T("Name"), text: $card.name)
+                    MoneyField(title: T("Credit limit"), amount: $card.creditLimit)
                 }
                 Section {
-                    Stepper("Día de corte: \(card.cutDay)", value: $card.cutDay, in: 1...31)
-                    Stepper("Día límite de pago: \(card.payDay)", value: $card.payDay, in: 1...31)
+                    Stepper(T("Closing day: %d", card.cutDay), value: $card.cutDay, in: 1...31)
+                    Stepper(T("Payment due day: %d", card.payDay), value: $card.payDay, in: 1...31)
                 } footer: {
                     let c = CardCycle.containing(model.today, cutDay: card.cutDay, payDay: card.payDay)
-                    Text("Ciclo actual: \(c.displayRange). Se paga el \(c.paymentDue.shortDisplay).")
+                    Text(T("Current cycle: %@. Due on %@.", c.displayRange, c.paymentDue.shortDisplay))
                 }
                 if !isNew {
                     Section {
-                        Toggle("Archivada", isOn: $card.isArchived)
+                        Toggle(T("Archived"), isOn: $card.isArchived)
                     }
                 }
             }
-            .navigationTitle(isNew ? "Nueva tarjeta" : "Editar tarjeta")
+            .navigationTitle(isNew ? T("New credit card") : T("Edit credit card"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button(T("Save")) {
                         let c = card
                         let ok = isNew
-                            ? model.perform { try model.db.createCard(c) }
+                            ? model.perform { try model.db.createCard(c, month: model.month) }
                             : model.write { db in try c.update(db) }
                         if ok { dismiss() }
                     }
@@ -109,18 +109,18 @@ struct CardDetailView: View {
             let items = st.expenses.filter { cyc.contains($0.expense.date) }
             List {
                 Section {
-                    MoneyRow(title: "Deuda", amount: st.debt, emphasis: true)
-                    MoneyRow(title: "Disponible", amount: st.available, subtitle: "Cupo \(MoneyFormat.cop(st.card.creditLimit))")
+                    MoneyRow(title: T("Debt"), amount: st.debt, emphasis: true)
+                    MoneyRow(title: T("Available"), amount: st.available, subtitle: T("Limit %@", MoneyFormat.cop(st.card.creditLimit)))
                     if st.installmentsOutstanding > 0 {
-                        MoneyRow(title: "Cuotas por facturar", amount: st.installmentsOutstanding,
-                                 subtitle: st.plans.map { "\($0.name): \($0.installmentCount - $0.billedInstallments(through: model.month)) de \($0.installmentCount)" }.joined(separator: " · "))
+                        MoneyRow(title: T("Installments not yet billed"), amount: st.installmentsOutstanding,
+                                 subtitle: st.plans.map { T("%@: %d of %d", $0.name, $0.installmentCount - $0.billedInstallments(through: model.month), $0.installmentCount) }.joined(separator: " · "))
                     }
-                    MoneyRow(title: "Bolsillo de pago", amount: st.pocketBalance, color: st.pocketBalance < st.dueNow ? .orange : .primary)
-                    MoneyRow(title: "Falta amortiguar", amount: st.uncovered, color: st.uncovered > 0 ? .red : .secondary,
-                             subtitle: "Gastos sin pagar que aún no tienen abono completo")
+                    MoneyRow(title: T("Payment pocket"), amount: st.pocketBalance, color: st.pocketBalance < st.dueNow ? .orange : .primary)
+                    MoneyRow(title: T("Still to set aside"), amount: st.uncovered, color: st.uncovered > 0 ? .red : .secondary,
+                             subtitle: T("Unpaid expenses without a full top-up"))
                     if st.dueNow > 0 {
-                        MoneyRow(title: "Vence el \(st.cycle.previous.paymentDue.shortDisplay)", amount: st.dueNow, color: .orange,
-                                 subtitle: "Gastos sin pagar hasta el corte del \(st.cycle.previous.end.shortDisplay)")
+                        MoneyRow(title: T("Due on %@", st.cycle.previous.paymentDue.shortDisplay), amount: st.dueNow, color: .orange,
+                                 subtitle: T("Unpaid expenses up to the closing on %@", st.cycle.previous.end.shortDisplay))
                     }
                 }
 
@@ -130,13 +130,13 @@ struct CardDetailView: View {
                         Spacer()
                         VStack {
                             Text(cyc.displayRange).font(.headline)
-                            Text("Pago: \(cyc.paymentDue.shortDisplay)").font(.caption).foregroundStyle(.secondary)
+                            Text(T("Due: %@", cyc.paymentDue.shortDisplay)).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Button { cycleOffset += 1 } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless)
                     }
                     if items.isEmpty {
-                        EmptyHint(text: "Sin gastos en este ciclo.")
+                        EmptyHint(text: T("No expenses in this cycle."))
                     }
                     ForEach(items) { s in
                         Button { editingExpense = s.expense } label: { CardExpenseRow(status: s) }.tint(.primary)
@@ -147,7 +147,7 @@ struct CardDetailView: View {
                     }
                 } header: {
                     HStack {
-                        Text("Ciclo")
+                        Text(T("Cycle"))
                         Spacer()
                         Text(MoneyFormat.cop(items.reduce(0) { $0 + $1.expense.amountCOP }))
                     }
@@ -155,7 +155,7 @@ struct CardDetailView: View {
 
                 let pays = model.snapshot.payments.filter { $0.cardId == cardId }.sorted { $0.date > $1.date }.prefix(5)
                 if !pays.isEmpty {
-                    Section("Últimos pagos") {
+                    Section(T("Recent payments")) {
                         ForEach(Array(pays)) { p in
                             HStack {
                                 Text(p.date.longDisplay)
@@ -175,9 +175,9 @@ struct CardDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button { showNewExpense = true } label: { Label("Agregar gasto", systemImage: "plus") }
-                        Button { showPayment = true } label: { Label("Registrar pago", systemImage: "banknote") }
-                        Button { editingCard = true } label: { Label("Editar tarjeta", systemImage: "pencil") }
+                        Button { showNewExpense = true } label: { Label(T("Add expense"), systemImage: "plus") }
+                        Button { showPayment = true } label: { Label(T("Record payment"), systemImage: "banknote") }
+                        Button { editingCard = true } label: { Label(T("Edit credit card"), systemImage: "pencil") }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -188,7 +188,7 @@ struct CardDetailView: View {
             .sheet(isPresented: $showPayment) { CardPaymentView(status: st) }
             .sheet(isPresented: $editingCard) { CardEditView(card: st.card) }
         } else {
-            ContentUnavailableView("Tarjeta no encontrada", systemImage: "creditcard")
+            ContentUnavailableView(T("Credit card not found"), systemImage: "creditcard")
         }
     }
 }
@@ -202,15 +202,15 @@ struct CardExpenseRow: View {
         let e = status.expense
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(e.reason.isEmpty ? "Sin descripción" : e.reason)
+                Text(e.reason.isEmpty ? T("No description") : e.reason)
                 HStack(spacing: 6) {
                     Text(e.date.shortDisplay)
                     if e.isPaid {
-                        Label("Pagado", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                        Label(T("Paid"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                     } else if status.uncovered == 0 {
-                        Label("Cubierto", systemImage: "shield.fill").foregroundStyle(.blue)
+                        Label(T("Covered"), systemImage: "shield.fill").foregroundStyle(.blue)
                     } else {
-                        Label("Falta \(MoneyFormat.cop(status.uncovered))", systemImage: "exclamationmark.circle").foregroundStyle(.red)
+                        Label(T("Missing %@", MoneyFormat.cop(status.uncovered)), systemImage: "exclamationmark.circle").foregroundStyle(.red)
                     }
                 }
                 .font(.caption)
@@ -258,27 +258,27 @@ struct CardExpenseEditView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Tarjeta", selection: $expense.cardId) {
+                    Picker(T("Credit card"), selection: $expense.cardId) {
                         ForEach(model.activeCards) { c in
                             Text(c.name).tag(c.id!)
                         }
                     }
                     CurrencyPicker(currency: $expense.currency)
-                    MoneyField(title: "Monto", amount: $expense.amount, currency: expense.currency)
+                    MoneyField(title: T("Amount"), amount: $expense.amount, currency: expense.currency)
                     if expense.currency == .usd {
                         RateField(rate: $expense.rate)
                             .onAppear { if expense.rate == nil { expense.rate = model.rate } }
-                        MoneyRow(title: "En pesos", amount: Exchange.toCOP(amountMinor: expense.amount, currency: .usd, rate: expense.rate))
+                        MoneyRow(title: T("In pesos"), amount: Exchange.toCOP(amountMinor: expense.amount, currency: .usd, rate: expense.rate))
                     }
                 }
                 Section {
-                    TextField("Razón", text: $expense.reason)
-                    DayDatePicker(title: "Fecha", day: $expense.date)
-                    Toggle("Ya se lo pagué a la tarjeta", isOn: $expense.isPaid)
+                    TextField(T("Reason"), text: $expense.reason)
+                    DayDatePicker(title: T("Date"), day: $expense.date)
+                    Toggle(T("Already paid to the card"), isOn: $expense.isPaid)
                 } footer: {
                     if let card = model.snapshot.card(expense.cardId) {
                         let c = card.cycle(containing: expense.date)
-                        Text("Ciclo \(c.displayRange), se paga el \(c.paymentDue.shortDisplay).")
+                        Text(T("Cycle %@, due on %@.", c.displayRange, c.paymentDue.shortDisplay))
                     }
                 }
 
@@ -301,25 +301,25 @@ struct CardExpenseEditView: View {
                         Button {
                             newAllocation = CardAllocation(cardExpenseId: expense.id!, fundId: nil, amount: uncovered, date: model.today)
                         } label: {
-                            Label("Agregar abono", systemImage: "plus")
+                            Label(T("Add top-up"), systemImage: "plus")
                         }
                     } header: {
                         HStack {
-                            Text("Abonos al bolsillo")
+                            Text(T("Top-ups to the payment pocket"))
                             Spacer()
-                            Text(uncovered > 0 ? "Falta \(MoneyFormat.cop(uncovered))" : "Cubierto")
+                            Text(uncovered > 0 ? T("Missing %@", MoneyFormat.cop(uncovered)) : T("Covered"))
                                 .foregroundStyle(uncovered > 0 ? .red : .green)
                         }
                     } footer: {
-                        Text("Cada abono mueve dinero al bolsillo de pago de la tarjeta desde un fondo, del saldo extra o de un consumible del mes, que queda pagado.")
+                        Text(T("Each top-up moves money into the card's payment pocket from a fund, the extra balance or the consumables pool (whose item gets marked as paid)."))
                     }
                 } else {
                     Section {
-                        EmptyHint(text: "Guarda el gasto para poder registrar abonos.")
+                        EmptyHint(text: T("Save the expense to add top-ups."))
                     }
                 }
             }
-            .navigationTitle(isNew ? "Nuevo gasto con tarjeta" : "Gasto con tarjeta")
+            .navigationTitle(isNew ? T("New credit card expense") : T("Credit card expense"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if isNew {
@@ -328,9 +328,9 @@ struct CardExpenseEditView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(isNew ? "Cancelar" : "Cerrar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(isNew ? T("Cancel") : T("Close")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { save() }
+                    Button(T("Save")) { save() }
                         .disabled(expense.amount <= 0 || expense.cardId == 0 || (expense.currency == .usd && (expense.rate ?? 0) <= 0))
                 }
             }
@@ -345,7 +345,6 @@ struct CardExpenseEditView: View {
         let ok = model.write { db in try saved.save(db) }
         guard ok else { return }
         if isNew {
-            // Se queda abierto para registrar abonos.
             expense = saved
             isNew = false
         } else {
@@ -370,20 +369,20 @@ struct AllocationEditView: View {
                         allocation.fromConsumables = new.fromConsumables
                         if let id = new.consumableId, let c = model.snapshot.consumable(id) { allocation.amount = c.amount }
                     }
-                MoneyField(title: "Monto", amount: $allocation.amount)
+                MoneyField(title: T("Amount"), amount: $allocation.amount)
                     .id(source)
-                DayDatePicker(title: "Fecha", day: $allocation.date)
+                DayDatePicker(title: T("Date"), day: $allocation.date)
                 SourceBalanceRow(source: source)
             }
-            .navigationTitle("Abono")
+            .navigationTitle(T("Top-up"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 source = MoneySource(fundId: allocation.fundId, fromConsumables: allocation.fromConsumables, consumableId: allocation.consumableId)
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button(T("Save")) {
                         let a = allocation
                         if model.perform({ try model.db.saveAllocation(a) }) { dismiss() }
                     }
@@ -420,10 +419,10 @@ struct CardPaymentView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Este pago cubre", selection: $covers) {
-                        Text("Hasta el corte del \(status.cycle.previous.end.shortDisplay) · \(MoneyFormat.cop(status.dueNow))").tag(Coverage.previousCut)
-                        Text("Todo lo pendiente hasta hoy · \(MoneyFormat.cop(pendingThroughToday))").tag(Coverage.allPending)
-                        Text("Nada, solo registrar el pago").tag(Coverage.none)
+                    Picker(T("This payment covers"), selection: $covers) {
+                        Text(T("Up to the closing on %@ · %@", status.cycle.previous.end.shortDisplay, MoneyFormat.cop(status.dueNow))).tag(Coverage.previousCut)
+                        Text(T("Everything pending up to today · %@", MoneyFormat.cop(pendingThroughToday))).tag(Coverage.allPending)
+                        Text(T("Nothing, just record the payment")).tag(Coverage.none)
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
@@ -431,19 +430,19 @@ struct CardPaymentView: View {
                         if coveredAmount > 0 { amount = coveredAmount }
                     }
                 } header: {
-                    Text("Gastos que quedan pagados")
+                    Text(T("Expenses that become paid"))
                 } footer: {
-                    Text("Los gastos cubiertos se marcan como pagados y salen de la deuda. El monto sale del bolsillo de pago.")
+                    Text(T("Covered expenses are marked as paid and leave the debt. The amount comes out of the payment pocket."))
                 }
                 Section {
-                    MoneyField(title: "Monto", amount: $amount)
+                    MoneyField(title: T("Amount"), amount: $amount)
                         .id(covers)
-                    DayDatePicker(title: "Fecha", day: $date)
+                    DayDatePicker(title: T("Date"), day: $date)
                 } footer: {
-                    Text("Bolsillo de pago: \(MoneyFormat.cop(status.pocketBalance)). Deuda total: \(MoneyFormat.cop(status.debt)).")
+                    Text(T("Payment pocket: %@. Total debt: %@.", MoneyFormat.cop(status.pocketBalance), MoneyFormat.cop(status.debt)))
                 }
             }
-            .navigationTitle("Pago a \(status.card.name)")
+            .navigationTitle(T("Payment to %@", status.card.name))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 covers = status.dueNow > 0 ? .previousCut : .allPending
@@ -451,9 +450,9 @@ struct CardPaymentView: View {
                 date = model.today
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Registrar") {
+                    Button(T("Record")) {
                         let p = CardPayment(cardId: status.card.id!, date: date, amount: amount)
                         let through: DayDate? = switch covers {
                         case .previousCut: status.cycle.previous.end

@@ -9,6 +9,14 @@ import Foundation
         #expect(MoneyFormat.cop(0) == "$0")
     }
 
+    @Test func compactFormatting() {
+        #expect(MoneyFormat.compact(1_260_000) == "$1,3M")
+        #expect(MoneyFormat.compact(4_000_000) == "$4M")
+        #expect(MoneyFormat.compact(850_000) == "$850k")
+        #expect(MoneyFormat.compact(-57_500) == "-$57,5k")
+        #expect(MoneyFormat.compact(900) == "$900")
+    }
+
     @Test func usdFormatting() {
         #expect(MoneyFormat.usd(cents: 1250) == "US$12,50")
         #expect(MoneyFormat.usd(cents: 100_000) == "US$1.000,00")
@@ -37,7 +45,7 @@ import Foundation
         #expect(YearMonth(year: 2026, month: 1).previous == YearMonth(year: 2025, month: 12))
         #expect(YearMonth(key: "2026-02")?.daysInMonth == 28)
         #expect(YearMonth(key: "2028-02")?.daysInMonth == 29)
-        #expect(d.displayName == "Diciembre 2026")
+        #expect(d.displayName == "December 2026")
     }
 
     @Test func dayDateArithmetic() {

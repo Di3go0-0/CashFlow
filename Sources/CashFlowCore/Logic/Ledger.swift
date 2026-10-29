@@ -73,10 +73,10 @@ public struct Snapshot: Sendable {
     }
 
     public func sourceName(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?) -> String {
-        if let c = consumable(consumableId) { return "Consumible: \(c.name)" }
-        if fromConsumables { return "Consumibles" }
+        if let c = consumable(consumableId) { return L10n.tr("Consumable: %@", c.name) }
+        if fromConsumables { return L10n.tr("Consumables") }
         if let f = fund(fundId) { return f.name }
-        return "Saldo extra"
+        return L10n.tr("Extra balance")
     }
 }
 
@@ -114,27 +114,27 @@ public extension Snapshot {
     func movements(of fundId: Int64) -> [FundMovement] {
         var out: [FundMovement] = []
         for c in contributions where c.fundId == fundId {
-            out.append(.init(id: "c\(c.id!)", date: c.date, kind: .contribution, title: "Aporte", amount: c.amount, sourceId: c.id!))
+            out.append(.init(id: "c\(c.id!)", date: c.date, kind: .contribution, title: L10n.tr("Contribution"), amount: c.amount, sourceId: c.id!))
         }
         for e in expenses where e.fundId == fundId {
             out.append(.init(id: "e\(e.id!)", date: e.date, kind: .expense, title: e.reason, amount: -e.amountCOP, sourceId: e.id!))
         }
         let expenseById = Dictionary(uniqueKeysWithValues: cardExpenses.map { ($0.id!, $0) })
         for a in allocations where a.fundId == fundId {
-            let reason = expenseById[a.cardExpenseId]?.reason ?? "Gasto tarjeta"
-            out.append(.init(id: "ao\(a.id!)", date: a.date, kind: .allocationOut, title: "Abono: \(reason)", amount: -a.amount, sourceId: a.id!))
+            let reason = expenseById[a.cardExpenseId]?.reason ?? ""
+            out.append(.init(id: "ao\(a.id!)", date: a.date, kind: .allocationOut, title: L10n.tr("Top-up: %@", reason), amount: -a.amount, sourceId: a.id!))
         }
         if let pocket = fund(fundId), let cardId = pocket.cardId {
             for a in allocations {
                 guard let ce = expenseById[a.cardExpenseId], ce.cardId == cardId else { continue }
-                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: "Abono desde \(allocationSourceName(a)): \(ce.reason)", amount: a.amount, sourceId: a.id!))
+                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: L10n.tr("Top-up from %@: %@", allocationSourceName(a), ce.reason), amount: a.amount, sourceId: a.id!))
             }
             for p in payments where p.cardId == cardId {
-                out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: "Pago tarjeta", amount: -p.amount, sourceId: p.id!))
+                out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: L10n.tr("Card payment"), amount: -p.amount, sourceId: p.id!))
             }
         }
         for a in adjustments where a.fundId == fundId {
-            let title = a.reason.isEmpty ? (a.amount >= 0 ? "Entrada manual" : "Salida manual") : a.reason
+            let title = a.reason.isEmpty ? L10n.tr(a.amount >= 0 ? "Manual deposit" : "Manual withdrawal") : a.reason
             out.append(.init(id: "j\(a.id!)", date: a.date, kind: .adjustment, title: title, amount: a.amount, sourceId: a.id!))
         }
         return out.sorted { ($0.date, $0.id) > ($1.date, $1.id) }

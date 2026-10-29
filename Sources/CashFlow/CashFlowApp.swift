@@ -21,17 +21,18 @@ struct RootView: View {
         @Bindable var model = model
         TabView {
             NavigationStack { SummaryView() }
-                .tabItem { Label("Resumen", systemImage: "chart.pie") }
+                .tabItem { Label(T("Summary"), systemImage: "chart.pie") }
             NavigationStack { MonthView() }
-                .tabItem { Label("Mes", systemImage: "calendar") }
+                .tabItem { Label(T("Month"), systemImage: "calendar") }
             NavigationStack { FundsView() }
-                .tabItem { Label("Fondos", systemImage: "tray.2") }
+                .tabItem { Label(T("Funds"), systemImage: "tray.2") }
             NavigationStack { CardsView() }
-                .tabItem { Label("Tarjetas", systemImage: "creditcard") }
+                .tabItem { Label(T("Credit cards"), systemImage: "creditcard") }
             NavigationStack { ExpensesView() }
-                .tabItem { Label("Gastos", systemImage: "cart") }
+                .tabItem { Label(T("Expenses"), systemImage: "cart") }
         }
-        .alert("Algo falló", isPresented: Binding(
+        .id(model.language)
+        .alert(T("Something went wrong"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )) {
