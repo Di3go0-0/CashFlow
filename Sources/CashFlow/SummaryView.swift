@@ -200,7 +200,7 @@ struct IncomeSpentChart: View {
             BarMark(x: .value(T("Month"), b.month), y: .value(T("Amount"), b.amount), width: .ratio(0.6))
                 .cornerRadius(4)
                 .foregroundStyle(by: .value(T("Series"), b.series))
-                .position(by: .value(T("Series"), b.series), spacing: 2)
+                .position(by: .value(T("Series"), b.series))
         }
         .chartForegroundStyleScale(domain: [income, spent], range: [colors[0], colors[1]])
         .chartLegend(position: .top, alignment: .leading)
