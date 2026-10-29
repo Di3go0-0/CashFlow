@@ -8,17 +8,23 @@ public struct IncomeSource: Codable, Identifiable, Hashable, Sendable, Fetchable
 
     public var id: Int64?
     public var name: String
-    /// Las recurrentes se precargan cada mes como pendientes.
+    /// Las recurrentes se precargan cada mes como pendientes, a partir de la plantilla.
     public var isRecurring: Bool
     public var sortOrder: Int
     public var isArchived: Bool
+    /// Plantilla: bruto o neto por defecto. Los descuentos y bonos van en `SourceDeduction` y `SourceBonus`.
+    public var templateGross: Int64?
+    public var templateNet: Int64?
 
-    public init(id: Int64? = nil, name: String, isRecurring: Bool = true, sortOrder: Int = 0, isArchived: Bool = false) {
+    public init(id: Int64? = nil, name: String, isRecurring: Bool = true, sortOrder: Int = 0, isArchived: Bool = false,
+                templateGross: Int64? = nil, templateNet: Int64? = nil) {
         self.id = id
         self.name = name
         self.isRecurring = isRecurring
         self.sortOrder = sortOrder
         self.isArchived = isArchived
+        self.templateGross = templateGross
+        self.templateNet = templateNet
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
@@ -111,6 +117,46 @@ public struct IncomeBonus: Codable, Identifiable, Hashable, Sendable, FetchableR
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 
+/// Descuento de la plantilla de una fuente.
+public struct SourceDeduction: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "sourceDeduction"
+
+    public var id: Int64?
+    public var sourceId: Int64
+    public var name: String
+    public var kind: DeductionKind
+    public var value: Int64
+
+    public init(id: Int64? = nil, sourceId: Int64, name: String, kind: DeductionKind, value: Int64) {
+        self.id = id
+        self.sourceId = sourceId
+        self.name = name
+        self.kind = kind
+        self.value = value
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
+/// Bono de la plantilla de una fuente.
+public struct SourceBonus: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "sourceBonus"
+
+    public var id: Int64?
+    public var sourceId: Int64
+    public var name: String
+    public var amount: Int64
+
+    public init(id: Int64? = nil, sourceId: Int64, name: String, amount: Int64) {
+        self.id = id
+        self.sourceId = sourceId
+        self.name = name
+        self.amount = amount
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
 /// Ingreso con su desglose. El neto se calcula aquí.
 public struct IncomeDetail: Hashable, Sendable, Identifiable {
     public var income: Income
@@ -157,10 +203,12 @@ public struct Fund: Codable, Identifiable, Hashable, Sendable, FetchableRecord, 
     public var cardId: Int64?
     public var sortOrder: Int
     public var isArchived: Bool
+    /// Mes en que se creó. El saldo inicial solo se puede editar en ese mes.
+    public var createdMonth: YearMonth
 
     public init(id: Int64? = nil, name: String, defaultContribution: Int64 = 0, resetsMonthly: Bool = false,
                 isSavings: Bool = false, initialBalance: Int64 = 0, cardId: Int64? = nil, sortOrder: Int = 0,
-                isArchived: Bool = false) {
+                isArchived: Bool = false, createdMonth: YearMonth = .current()) {
         self.id = id
         self.name = name
         self.defaultContribution = defaultContribution
@@ -170,7 +218,10 @@ public struct Fund: Codable, Identifiable, Hashable, Sendable, FetchableRecord, 
         self.cardId = cardId
         self.sortOrder = sortOrder
         self.isArchived = isArchived
+        self.createdMonth = createdMonth
     }
+
+    public func canEditInitialBalance(in month: YearMonth) -> Bool { month == createdMonth }
 
     public var isCardPocket: Bool { cardId != nil }
 
@@ -307,6 +358,81 @@ public struct Commitment: Codable, Identifiable, Hashable, Sendable, FetchableRe
         self.amount = amount
         self.date = date
         self.installmentPlanId = installmentPlanId
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
+/// Movimiento manual de un fondo: meter o sacar plata, o pasar entre fondos (dos filas con el mismo `pairId`).
+public struct FundAdjustment: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "fundAdjustment"
+
+    public var id: Int64?
+    public var fundId: Int64
+    public var date: DayDate
+    /// Positivo entra, negativo sale.
+    public var amount: Int64
+    public var reason: String
+    public var pairId: String?
+
+    public init(id: Int64? = nil, fundId: Int64, date: DayDate, amount: Int64, reason: String, pairId: String? = nil) {
+        self.id = id
+        self.fundId = fundId
+        self.date = date
+        self.amount = amount
+        self.reason = reason
+        self.pairId = pairId
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
+// MARK: - Consumibles
+
+/// Plantilla de un consumible: gasto del mes que se paga poco a poco (Spotify, plan de celular, gimnasio).
+public struct ConsumableTemplate: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "consumableTemplate"
+
+    public var id: Int64?
+    public var name: String
+    public var amount: Int64
+    public var sortOrder: Int
+    public var isArchived: Bool
+
+    public init(id: Int64? = nil, name: String, amount: Int64, sortOrder: Int = 0, isArchived: Bool = false) {
+        self.id = id
+        self.name = name
+        self.amount = amount
+        self.sortOrder = sortOrder
+        self.isArchived = isArchived
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
+/// Instancia mensual de un consumible. El total del mes se aparta al proyectar y cada ítem se marca pagado.
+public struct Consumable: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "consumable"
+
+    public var id: Int64?
+    public var projectionId: Int64
+    public var templateId: Int64?
+    public var name: String
+    public var amount: Int64
+    public var isPaid: Bool
+    public var paidDate: DayDate?
+    public var sortOrder: Int
+
+    public init(id: Int64? = nil, projectionId: Int64, templateId: Int64? = nil, name: String, amount: Int64,
+                isPaid: Bool = false, paidDate: DayDate? = nil, sortOrder: Int = 0) {
+        self.id = id
+        self.projectionId = projectionId
+        self.templateId = templateId
+        self.name = name
+        self.amount = amount
+        self.isPaid = isPaid
+        self.paidDate = paidDate
+        self.sortOrder = sortOrder
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }

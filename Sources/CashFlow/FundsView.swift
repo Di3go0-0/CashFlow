@@ -13,7 +13,7 @@ struct FundsView: View {
             let pockets = model.fundReports.filter { $0.fund.isCardPocket }
             Section {
                 if regular.isEmpty {
-                    EmptyHint(text: "Un fondo es un bolsillo con propósito: Ahorro Moto, Emergencia, Compras del mes…")
+                    EmptyHint(text: "Un fondo es un bolsillo con un propósito. Algunos acumulan, otros se gastan en el mes.")
                 }
                 ForEach(regular) { r in
                     NavigationLink(value: r.fund.id!) {
@@ -78,6 +78,7 @@ struct FundDetailView: View {
     @Environment(AppModel.self) private var model
     var fundId: Int64
     @State private var editing = false
+    @State private var adjusting = false
 
     private var report: FundReport? {
         model.snapshot.fundReports(asOf: model.today, month: model.month, includeArchived: true).first { $0.fund.id == fundId }
@@ -112,15 +113,30 @@ struct FundDetailView: View {
                             MoneyText(amount: m.amount, showSign: true)
                                 .foregroundStyle(m.amount >= 0 ? .green : .primary)
                         }
+                        .swipeActions(edge: .trailing) {
+                            if m.kind == .adjustment {
+                                Button("Borrar", role: .destructive) {
+                                    model.perform { try model.db.deleteAdjustment(id: m.sourceId) }
+                                }
+                            }
+                        }
                     }
                 }
             }
             .navigationTitle(r.fund.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Editar") { editing = true } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { adjusting = true } label: { Label("Meter o sacar plata", systemImage: "arrow.left.arrow.right") }
+                        Button { editing = true } label: { Label("Editar fondo", systemImage: "pencil") }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
             }
             .sheet(isPresented: $editing) { FundEditView(fund: r.fund) }
+            .sheet(isPresented: $adjusting) { FundAdjustmentView(fund: r.fund) }
         } else {
             ContentUnavailableView("Fondo no encontrado", systemImage: "tray")
         }
@@ -144,13 +160,18 @@ struct FundEditView: View {
                 Section {
                     TextField("Nombre", text: $fund.name)
                     MoneyField(title: "Aporte mensual sugerido", amount: $fund.defaultContribution)
-                    MoneyField(title: "Saldo inicial", amount: $fund.initialBalance)
+                    if isNew || fund.canEditInitialBalance(in: model.month) {
+                        MoneyField(title: "Saldo inicial", amount: $fund.initialBalance)
+                    } else {
+                        MoneyRow(title: "Saldo inicial", amount: fund.initialBalance,
+                                 subtitle: "Solo editable en \(fund.createdMonth.displayName). Usa un movimiento manual para ajustar.")
+                    }
                 }
                 Section {
                     Toggle("Es ahorro", isOn: $fund.isSavings)
                     Toggle("Se gasta en el mes", isOn: $fund.resetsMonthly)
                 } footer: {
-                    Text("Ahorro: sus aportes cuentan como ahorrado en el resumen. Se gasta en el mes: muestra cuánto queda de lo aportado este mes, como Consumibles o Compras Mes.")
+                    Text("Ahorro: sus aportes cuentan como ahorrado en el resumen. Se gasta en el mes: muestra cuánto queda de lo aportado este mes.")
                 }
                 if !isNew && !fund.isCardPocket {
                     Section {
@@ -167,10 +188,66 @@ struct FundEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
                         var f = fund
-                        if isNew { f.sortOrder = model.snapshot.funds.count }
+                        if isNew {
+                            f.sortOrder = model.snapshot.funds.count
+                            f.createdMonth = model.month
+                        }
                         if model.write({ db in var f = f; try f.save(db) }) { dismiss() }
                     }
                     .disabled(fund.name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+struct FundAdjustmentView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var fund: Fund
+    @State private var isIncoming = true
+    @State private var amount: Int64 = 0
+    @State private var reason = ""
+    @State private var date: DayDate = .today()
+    @State private var counterpart: Int64?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("Movimiento", selection: $isIncoming) {
+                    Text("Entra").tag(true)
+                    Text("Sale").tag(false)
+                }
+                .pickerStyle(.segmented)
+                MoneyField(title: "Monto", amount: $amount)
+                TextField("Razón", text: $reason)
+                DayDatePicker(title: "Fecha", day: $date)
+                Section {
+                    Picker(isIncoming ? "Viene de" : "Va para", selection: $counterpart) {
+                        Text("Fuera de la app").tag(Int64?.none)
+                        ForEach(model.activeFunds.filter { $0.id != fund.id }) { f in
+                            Text(f.name).tag(Int64?.some(f.id!))
+                        }
+                    }
+                } footer: {
+                    Text("Si eliges otro fondo, el movimiento contrario se registra allá automáticamente.")
+                }
+                MoneyRow(title: "Saldo hoy", amount: model.snapshot.balance(of: fund.id!, asOf: model.today))
+            }
+            .navigationTitle(fund.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { date = model.defaultDate }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") {
+                        let signed = isIncoming ? amount : -amount
+                        let ok = model.perform {
+                            try model.db.adjustFund(fund.id!, amount: signed, date: date, reason: reason, counterpartFundId: counterpart)
+                        }
+                        if ok { dismiss() }
+                    }
+                    .disabled(amount <= 0)
                 }
             }
         }

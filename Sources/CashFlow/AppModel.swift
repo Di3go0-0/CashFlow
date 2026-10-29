@@ -34,10 +34,21 @@ final class AppModel {
         do {
             snapshot = try db.snapshot()
             loadRate()
+            // El mes en curso se instancia solo.
+            let current = YearMonth.current()
+            if snapshot.projection(for: current) == nil {
+                try db.startMonth(current)
+                snapshot = try db.snapshot()
+            }
         } catch {
             report(error)
         }
     }
+
+    /// Lo que se edita en el mes en curso actualiza las plantillas de los meses futuros.
+    var editsTemplate: Bool { month == .current() }
+    var isCurrentMonth: Bool { month == .current() }
+    var isFutureMonth: Bool { month > .current() }
 
     func report(_ error: Error) {
         errorMessage = String(describing: error)
@@ -95,6 +106,15 @@ final class AppModel {
 
     func startMonth() {
         perform { try db.startMonth(month) }
+    }
+
+    func consumables() -> [Consumable] { snapshot.consumables(for: month) }
+
+    /// Primer fondo activo que todavía no tiene aporte este mes.
+    var nextFundWithoutContribution: Fund? {
+        guard let p = projection else { return activeFunds.first }
+        let used = Set(contributions(of: p).map(\.fundId))
+        return activeFunds.first { !used.contains($0.id!) } ?? activeFunds.first
     }
 
     /// Fecha por defecto para un registro nuevo: hoy si estamos en el mes elegido, si no el primer día.

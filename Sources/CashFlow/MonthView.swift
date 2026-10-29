@@ -3,12 +3,13 @@ import SwiftUI
 import GRDB
 import CashFlowCore
 
-/// Ingresos y proyección del mes elegido.
+/// Ingresos, proyección y consumibles del mes elegido.
 struct MonthView: View {
     @Environment(AppModel.self) private var model
     @State private var editingIncome: IncomeDetail?
     @State private var editingContribution: Contribution?
     @State private var editingCommitment: Commitment?
+    @State private var editingConsumable: Consumable?
     @State private var showSources = false
     @State private var confirmCopy = false
 
@@ -17,12 +18,19 @@ struct MonthView: View {
         List {
             Section {
                 MonthSwitcher(month: $model.month)
+            } footer: {
+                if model.isCurrentMonth {
+                    Text("Lo que edites este mes queda como plantilla para los meses siguientes.")
+                } else if model.isFutureMonth {
+                    Text("Mes futuro: los cambios solo aplican a este mes.")
+                }
             }
 
             incomesSection
 
             if let p = model.projection {
                 contributionsSection(p)
+                consumablesSection(p)
                 commitmentsSection(p, kind: .debt, title: "Deudas y cuotas", addLabel: "Agregar deuda")
                 commitmentsSection(p, kind: .necessary, title: "Gastos necesarios", addLabel: "Agregar gasto necesario")
                 resultSection
@@ -37,7 +45,7 @@ struct MonthView: View {
                         Label("Iniciar \(model.month.monthName)", systemImage: "play.circle")
                     }
                 } footer: {
-                    Text("Reparte el ingreso en fondos, deudas y gastos necesarios. Lo que sobra es el saldo extra.")
+                    Text("Instancia el mes con las plantillas: aportes a fondos, consumibles, cuotas y fuentes recurrentes.")
                 }
             }
         }
@@ -45,8 +53,9 @@ struct MonthView: View {
         .sheet(item: $editingIncome) { IncomeEditView(detail: $0) }
         .sheet(item: $editingContribution) { ContributionEditView(contribution: $0) }
         .sheet(item: $editingCommitment) { CommitmentEditView(commitment: $0) }
+        .sheet(item: $editingConsumable) { ConsumableEditView(item: $0) }
         .sheet(isPresented: $showSources) { NavigationStack { IncomeSourcesView() } }
-        .confirmationDialog("Reemplaza los aportes y compromisos actuales de \(model.month.monthName).",
+        .confirmationDialog("Reemplaza los aportes, consumibles y compromisos actuales de \(model.month.monthName).",
                             isPresented: $confirmCopy, titleVisibility: .visible) {
             Button("Copiar", role: .destructive) {
                 model.perform { try model.db.copyProjection(from: model.month.previous, to: model.month) }
@@ -99,7 +108,7 @@ struct MonthView: View {
         }
     }
 
-    // MARK: Proyección
+    // MARK: Aportes
 
     private func contributionsSection(_ p: Projection) -> some View {
         Section {
@@ -107,9 +116,14 @@ struct MonthView: View {
             ForEach(items) { c in
                 Button { editingContribution = c } label: {
                     HStack {
-                        Text(model.fundName(c.fundId))
-                        if model.snapshot.fund(c.fundId)?.isSavings == true {
-                            Image(systemName: "leaf.fill").font(.caption2).foregroundStyle(.green)
+                        VStack(alignment: .leading) {
+                            HStack(spacing: 4) {
+                                Text(model.fundName(c.fundId))
+                                if model.snapshot.fund(c.fundId)?.isSavings == true {
+                                    Image(systemName: "leaf.fill").font(.caption2).foregroundStyle(.green)
+                                }
+                            }
+                            Text(c.date.shortDisplay).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         MoneyText(amount: c.amount)
@@ -119,11 +133,11 @@ struct MonthView: View {
             }
             .onDelete { idx in
                 let ids = idx.map { items[$0].id! }
-                model.write { db in try Contribution.deleteAll(db, ids: ids) }
+                model.perform { try model.db.deleteContributions(ids: ids, asTemplate: model.editsTemplate) }
             }
             Button {
-                guard let f = model.activeFunds.first else { return }
-                editingContribution = Contribution(projectionId: p.id!, fundId: f.id!, amount: f.defaultContribution, date: model.month.firstDay)
+                guard let f = model.nextFundWithoutContribution else { return }
+                editingContribution = Contribution(projectionId: p.id!, fundId: f.id!, amount: f.defaultContribution, date: model.defaultDate)
             } label: {
                 Label("Agregar aporte", systemImage: "plus")
             }
@@ -136,6 +150,60 @@ struct MonthView: View {
             }
         }
     }
+
+    // MARK: Consumibles
+
+    private func consumablesSection(_ p: Projection) -> some View {
+        Section {
+            let items = model.consumables()
+            if items.isEmpty {
+                EmptyHint(text: "Gastos del mes que pagas poco a poco: suscripciones, servicios, planes.")
+            }
+            ForEach(items) { c in
+                HStack {
+                    Button {
+                        model.perform { try model.db.setConsumablePaid(id: c.id!, paid: !c.isPaid, on: model.defaultDate) }
+                    } label: {
+                        Image(systemName: c.isPaid ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(c.isPaid ? .green : .secondary)
+                            .font(.title3)
+                    }
+                    .buttonStyle(.borderless)
+                    Button { editingConsumable = c } label: {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(c.name).strikethrough(c.isPaid, color: .secondary)
+                                if c.isPaid, let d = c.paidDate {
+                                    Text("Pagado el \(d.shortDisplay)").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            MoneyText(amount: c.amount).foregroundStyle(c.isPaid ? .secondary : .primary)
+                        }
+                    }
+                    .tint(.primary)
+                }
+            }
+            .onDelete { idx in
+                let ids = idx.map { items[$0].id! }
+                model.perform { try model.db.deleteConsumables(ids: ids, asTemplate: model.editsTemplate) }
+            }
+            Button {
+                editingConsumable = Consumable(projectionId: p.id!, name: "", amount: 0)
+            } label: {
+                Label("Agregar consumible", systemImage: "plus")
+            }
+        } header: {
+            HStack {
+                Text("Consumibles")
+                Spacer()
+                let s = model.summary
+                Text("Por pagar \(MoneyFormat.cop(s.consumablesPending)) de \(MoneyFormat.cop(s.consumablesTotal))")
+            }
+        }
+    }
+
+    // MARK: Compromisos
 
     private func commitmentsSection(_ p: Projection, kind: CommitmentKind, title: String, addLabel: String) -> some View {
         Section {
@@ -155,7 +223,7 @@ struct MonthView: View {
                 model.write { db in try Commitment.deleteAll(db, ids: ids) }
             }
             Button {
-                editingCommitment = Commitment(projectionId: p.id!, kind: kind, name: "", amount: 0, date: model.month.firstDay)
+                editingCommitment = Commitment(projectionId: p.id!, kind: kind, name: "", amount: 0, date: model.defaultDate)
             } label: {
                 Label(addLabel, systemImage: "plus")
             }
@@ -172,7 +240,7 @@ struct MonthView: View {
         let s = model.summary
         return Section("Resultado") {
             MoneyRow(title: "Ingresos", amount: s.income)
-            MoneyRow(title: "Comprometido", amount: -s.committed)
+            MoneyRow(title: "Comprometido", amount: -s.committed, subtitle: "Fondos, consumibles, deudas y necesarios")
             MoneyRow(title: "Saldo extra", amount: s.extraBalance, emphasis: true, color: s.extraBalance < 0 ? .red : .primary)
             MoneyRow(title: "Restante hoy", amount: s.remaining, subtitle: "Saldo extra menos lo ya gastado de él")
         }
@@ -209,6 +277,14 @@ struct IncomeEditView: View {
         return d
     }
 
+    private var hasIncompleteDeduction: Bool {
+        detail.deductions.contains { $0.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.value == 0 }
+    }
+
+    private var hasIncompleteBonus: Bool {
+        detail.bonuses.contains { $0.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.amount == 0 }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -236,7 +312,7 @@ struct IncomeEditView: View {
                 }
 
                 if detailed {
-                    Section("Descuentos") {
+                    Section {
                         ForEach(detail.deductions.indices, id: \.self) { i in
                             HStack {
                                 TextField("Nombre", text: $detail.deductions[i].name)
@@ -249,7 +325,7 @@ struct IncomeEditView: View {
                                 if detail.deductions[i].kind == .percent {
                                     PercentField(basisPoints: $detail.deductions[i].value).frame(width: 80)
                                 } else {
-                                    MoneyField(title: "", amount: $detail.deductions[i].value).frame(width: 140)
+                                    MoneyField(title: "", amount: $detail.deductions[i].value).frame(width: 150)
                                 }
                             }
                         }
@@ -259,9 +335,14 @@ struct IncomeEditView: View {
                         } label: {
                             Label("Agregar descuento", systemImage: "plus")
                         }
+                        .disabled(hasIncompleteDeduction)
                         if !detail.deductions.isEmpty {
                             MoneyRow(title: "Total descuentos", amount: -preview.deductionsTotal)
                         }
+                    } header: {
+                        Text("Descuentos")
+                    } footer: {
+                        Text("Desliza a la izquierda para borrar uno.")
                     }
                 }
 
@@ -269,7 +350,7 @@ struct IncomeEditView: View {
                     ForEach(detail.bonuses.indices, id: \.self) { i in
                         HStack {
                             TextField("Nombre", text: $detail.bonuses[i].name)
-                            MoneyField(title: "", amount: $detail.bonuses[i].amount).frame(width: 160)
+                            MoneyField(title: "", amount: $detail.bonuses[i].amount).frame(width: 170)
                         }
                     }
                     .onDelete { detail.bonuses.remove(atOffsets: $0) }
@@ -278,10 +359,15 @@ struct IncomeEditView: View {
                     } label: {
                         Label("Agregar bono", systemImage: "plus")
                     }
+                    .disabled(hasIncompleteBonus)
                 }
 
                 Section {
                     MoneyRow(title: "Neto", amount: preview.net, emphasis: true)
+                } footer: {
+                    if model.editsTemplate, model.snapshot.source(detail.income.sourceId)?.isRecurring == true {
+                        Text("Fuente recurrente: este desglose queda como plantilla para los próximos meses.")
+                    }
                 }
             }
             .navigationTitle(detail.income.id == nil ? "Nuevo ingreso" : "Ingreso")
@@ -292,7 +378,10 @@ struct IncomeEditView: View {
                     Button("Guardar") {
                         var d = preview
                         d.income.month = model.month
-                        if model.perform({ try model.db.saveIncome(d) }) { dismiss() }
+                        d.deductions.removeAll { $0.name.trimmingCharacters(in: .whitespaces).isEmpty && $0.value == 0 }
+                        d.bonuses.removeAll { $0.name.trimmingCharacters(in: .whitespaces).isEmpty && $0.amount == 0 }
+                        let asTemplate = model.editsTemplate
+                        if model.perform({ try model.db.saveIncome(d, asTemplate: asTemplate) }) { dismiss() }
                     }
                 }
             }
@@ -313,12 +402,14 @@ struct ContributionEditView: View {
                         Text(f.name).tag(f.id!)
                     }
                 }
+                .onChange(of: contribution.fundId) { _, new in
+                    if let f = model.snapshot.fund(new) { contribution.amount = f.defaultContribution }
+                }
                 MoneyField(title: "Aporte", amount: $contribution.amount)
+                    .id(contribution.fundId)
                 DayDatePicker(title: "Fecha", day: $contribution.date)
-                if let f = model.snapshot.fund(contribution.fundId), f.defaultContribution > 0 {
-                    Button("Usar sugerido: \(MoneyFormat.cop(f.defaultContribution))") {
-                        contribution.amount = f.defaultContribution
-                    }
+                if let f = model.snapshot.fund(contribution.fundId) {
+                    MoneyRow(title: "Saldo del fondo hoy", amount: model.snapshot.balance(of: f.id!, asOf: model.today))
                 }
             }
             .navigationTitle("Aporte")
@@ -328,9 +419,48 @@ struct ContributionEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
                         let c = contribution
-                        if model.write({ db in var c = c; try c.save(db) }) { dismiss() }
+                        let asTemplate = model.editsTemplate
+                        if model.perform({ try model.db.saveContribution(c, asTemplate: asTemplate) }) { dismiss() }
                     }
                     .disabled(contribution.amount <= 0)
+                }
+            }
+        }
+    }
+}
+
+struct ConsumableEditView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State var item: Consumable
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Concepto", text: $item.name)
+                MoneyField(title: "Monto", amount: $item.amount)
+                Toggle("Pagado", isOn: $item.isPaid)
+                    .onChange(of: item.isPaid) { _, paid in
+                        item.paidDate = paid ? (item.paidDate ?? model.defaultDate) : nil
+                    }
+                if item.isPaid {
+                    DayDatePicker(title: "Fecha de pago", day: Binding(
+                        get: { item.paidDate ?? model.defaultDate },
+                        set: { item.paidDate = $0 }
+                    ))
+                }
+            }
+            .navigationTitle(item.id == nil ? "Nuevo consumible" : "Consumible")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") {
+                        let c = item
+                        let asTemplate = model.editsTemplate
+                        if model.perform({ try model.db.saveConsumable(c, asTemplate: asTemplate) }) { dismiss() }
+                    }
+                    .disabled(item.name.trimmingCharacters(in: .whitespaces).isEmpty || item.amount <= 0)
                 }
             }
         }
@@ -416,7 +546,7 @@ struct IncomeSourcesView: View {
             }
             Section("Nueva fuente") {
                 HStack {
-                    TextField("Nombre (Employer, University…)", text: $newName)
+                    TextField("Nombre", text: $newName)
                     Button("Agregar") {
                         let name = newName.trimmingCharacters(in: .whitespaces)
                         guard !name.isEmpty else { return }

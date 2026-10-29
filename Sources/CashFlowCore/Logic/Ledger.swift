@@ -5,8 +5,13 @@ import GRDB
 /// (cientos de filas por año), así que calcular en Swift es más simple y testeable que en SQL.
 public struct Snapshot: Sendable {
     public var sources: [IncomeSource] = []
+    public var sourceDeductions: [SourceDeduction] = []
+    public var sourceBonuses: [SourceBonus] = []
     public var incomes: [IncomeDetail] = []
+    public var consumableTemplates: [ConsumableTemplate] = []
+    public var consumables: [Consumable] = []
     public var funds: [Fund] = []
+    public var adjustments: [FundAdjustment] = []
     public var cards: [Card] = []
     public var plans: [InstallmentPlan] = []
     public var projections: [Projection] = []
@@ -22,11 +27,16 @@ public struct Snapshot: Sendable {
     public static func load(_ db: Database) throws -> Snapshot {
         var s = Snapshot()
         s.sources = try IncomeSource.order(Column("sortOrder"), Column("name")).fetchAll(db)
+        s.sourceDeductions = try SourceDeduction.fetchAll(db)
+        s.sourceBonuses = try SourceBonus.fetchAll(db)
+        s.consumableTemplates = try ConsumableTemplate.order(Column("sortOrder"), Column("name")).fetchAll(db)
+        s.consumables = try Consumable.order(Column("sortOrder"), Column("id")).fetchAll(db)
         let incomes = try Income.order(Column("date")).fetchAll(db)
         let deductions = Dictionary(grouping: try IncomeDeduction.fetchAll(db), by: \.incomeId)
         let bonuses = Dictionary(grouping: try IncomeBonus.fetchAll(db), by: \.incomeId)
         s.incomes = incomes.map { IncomeDetail(income: $0, deductions: deductions[$0.id!] ?? [], bonuses: bonuses[$0.id!] ?? []) }
         s.funds = try Fund.order(Column("sortOrder"), Column("name")).fetchAll(db)
+        s.adjustments = try FundAdjustment.fetchAll(db)
         s.cards = try Card.order(Column("name")).fetchAll(db)
         s.plans = try InstallmentPlan.fetchAll(db)
         s.projections = try Projection.fetchAll(db)
@@ -45,6 +55,10 @@ public struct Snapshot: Sendable {
     public func projection(for month: YearMonth) -> Projection? { projections.first { $0.month == month } }
     /// Bolsillo de pago de una tarjeta.
     public func pocket(of cardId: Int64) -> Fund? { funds.first { $0.cardId == cardId } }
+    public func consumables(for month: YearMonth) -> [Consumable] {
+        guard let p = projection(for: month) else { return [] }
+        return consumables.filter { $0.projectionId == p.id }
+    }
 }
 
 // MARK: - Fondos
@@ -62,7 +76,7 @@ public struct FundReport: Hashable, Sendable, Identifiable {
 }
 
 public enum FundMovementKind: String, Sendable {
-    case contribution, expense, allocationOut, allocationIn, cardPayment
+    case contribution, expense, allocationOut, allocationIn, cardPayment, adjustment
 }
 
 public struct FundMovement: Hashable, Sendable, Identifiable {
@@ -72,6 +86,8 @@ public struct FundMovement: Hashable, Sendable, Identifiable {
     public var title: String
     /// Positivo entra al fondo, negativo sale.
     public var amount: Int64
+    /// Id del registro de origen, para poder borrarlo desde la lista.
+    public var sourceId: Int64
 }
 
 public extension Snapshot {
@@ -79,25 +95,29 @@ public extension Snapshot {
     func movements(of fundId: Int64) -> [FundMovement] {
         var out: [FundMovement] = []
         for c in contributions where c.fundId == fundId {
-            out.append(.init(id: "c\(c.id!)", date: c.date, kind: .contribution, title: "Aporte", amount: c.amount))
+            out.append(.init(id: "c\(c.id!)", date: c.date, kind: .contribution, title: "Aporte", amount: c.amount, sourceId: c.id!))
         }
         for e in expenses where e.fundId == fundId {
-            out.append(.init(id: "e\(e.id!)", date: e.date, kind: .expense, title: e.reason, amount: -e.amountCOP))
+            out.append(.init(id: "e\(e.id!)", date: e.date, kind: .expense, title: e.reason, amount: -e.amountCOP, sourceId: e.id!))
         }
         let expenseById = Dictionary(uniqueKeysWithValues: cardExpenses.map { ($0.id!, $0) })
         for a in allocations where a.fundId == fundId {
             let reason = expenseById[a.cardExpenseId]?.reason ?? "Gasto tarjeta"
-            out.append(.init(id: "ao\(a.id!)", date: a.date, kind: .allocationOut, title: "Abono: \(reason)", amount: -a.amount))
+            out.append(.init(id: "ao\(a.id!)", date: a.date, kind: .allocationOut, title: "Abono: \(reason)", amount: -a.amount, sourceId: a.id!))
         }
         if let pocket = fund(fundId), let cardId = pocket.cardId {
             for a in allocations {
                 guard let ce = expenseById[a.cardExpenseId], ce.cardId == cardId else { continue }
                 let from = fund(a.fundId)?.name ?? "Saldo extra"
-                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: "Abono desde \(from): \(ce.reason)", amount: a.amount))
+                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: "Abono desde \(from): \(ce.reason)", amount: a.amount, sourceId: a.id!))
             }
             for p in payments where p.cardId == cardId {
-                out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: "Pago tarjeta", amount: -p.amount))
+                out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: "Pago tarjeta", amount: -p.amount, sourceId: p.id!))
             }
+        }
+        for a in adjustments where a.fundId == fundId {
+            let title = a.reason.isEmpty ? (a.amount >= 0 ? "Entrada manual" : "Salida manual") : a.reason
+            out.append(.init(id: "j\(a.id!)", date: a.date, kind: .adjustment, title: title, amount: a.amount, sourceId: a.id!))
         }
         return out.sorted { ($0.date, $0.id) > ($1.date, $1.id) }
     }
@@ -132,14 +152,20 @@ public struct MonthSummary: Hashable, Sendable {
     public var contributions: Int64
     public var debts: Int64
     public var necessary: Int64
+    /// Total de consumibles del mes: se aparta completo al proyectar.
+    public var consumablesTotal: Int64
+    /// Consumibles ya pagados.
+    public var consumablesPaid: Int64
     /// Aportes a fondos con bandera de ahorro.
     public var saved: Int64
-    /// Gastos sin tarjeta + gastos con tarjeta + compromisos, por fecha del mes.
+    /// Gastos sin tarjeta + gastos con tarjeta + deudas + necesarios + consumibles pagados.
     public var spent: Int64
     /// Gastos y abonos que salieron del saldo extra.
     public var spentFromExtra: Int64
 
-    public var committed: Int64 { contributions + debts + necessary }
+    /// Lo apartado para consumibles que todavía no se ha gastado.
+    public var consumablesPending: Int64 { consumablesTotal - consumablesPaid }
+    public var committed: Int64 { contributions + debts + necessary + consumablesTotal }
     /// Lo que queda del ingreso después de repartirlo.
     public var extraBalance: Int64 { income - committed }
     /// Saldo extra menos lo que ya se gastó de él.
@@ -161,15 +187,20 @@ public extension Snapshot {
         let debts = cms.filter { $0.kind == .debt }.reduce(0) { $0 + $1.amount }
         let necessary = cms.filter { $0.kind == .necessary }.reduce(0) { $0 + $1.amount }
 
+        let cons = consumables(for: month)
+        let consTotal = cons.reduce(0) { $0 + $1.amount }
+        let consPaid = cons.filter(\.isPaid).reduce(0) { $0 + $1.amount }
+
         let ex = expenses.filter { month.contains($0.date) }
         let cex = cardExpenses.filter { month.contains($0.date) }
-        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + debts + necessary
+        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + debts + necessary + consPaid
 
         let fromExtra = ex.filter { $0.fundId == nil }.reduce(0) { $0 + $1.amountCOP }
             + allocations.filter { $0.fundId == nil && month.contains($0.date) }.reduce(0) { $0 + $1.amount }
 
         return MonthSummary(month: month, income: income, pendingIncome: pending, contributions: contributed,
-                            debts: debts, necessary: necessary, saved: saved, spent: spent, spentFromExtra: fromExtra)
+                            debts: debts, necessary: necessary, consumablesTotal: consTotal, consumablesPaid: consPaid,
+                            saved: saved, spent: spent, spentFromExtra: fromExtra)
     }
 }
 

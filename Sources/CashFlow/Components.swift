@@ -50,14 +50,16 @@ struct MoneyField: View {
                 .keyboardType(currency == .cop ? .numberPad : .decimalPad)
                 .multilineTextAlignment(.trailing)
                 .onChange(of: text) { _, new in
-                    amount = MoneyFormat.parse(new, currency: currency) ?? 0
+                    let r = MoneyFormat.liveFormat(new, currency: currency)
+                    if r.text != new { text = r.text }
+                    amount = r.minor ?? 0
                 }
                 .onChange(of: currency) { _, _ in
                     text = ""
                     amount = 0
                 }
                 .onAppear {
-                    text = amount == 0 ? "" : MoneyFormat.plain(minor: amount, currency: currency)
+                    text = amount == 0 ? "" : MoneyFormat.liveFormat(MoneyFormat.plain(minor: amount, currency: currency), currency: currency).text
                 }
             Text(currency.rawValue)
                 .font(.caption)

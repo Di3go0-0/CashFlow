@@ -2,6 +2,9 @@ import Foundation
 import GRDB
 
 /// Operaciones compuestas sobre la base de datos.
+///
+/// Regla de plantillas: lo que se edita en el mes en curso (`asTemplate == true`) actualiza la plantilla
+/// que se usa para instanciar meses futuros. Editar un mes futuro o pasado solo toca ese mes.
 public extension AppDatabase {
     func snapshot() throws -> Snapshot {
         try read { try Snapshot.load($0) }
@@ -11,11 +14,11 @@ public extension AppDatabase {
 
     /// Crea la tarjeta y su bolsillo de pago.
     @discardableResult
-    func createCard(_ card: Card) throws -> Card {
+    func createCard(_ card: Card, month: YearMonth = .current()) throws -> Card {
         try write { db in
             var c = card
             try c.insert(db)
-            var pocket = Fund(name: "Pago \(c.name)", cardId: c.id, sortOrder: 1_000)
+            var pocket = Fund(name: "Pago \(c.name)", cardId: c.id, sortOrder: 1_000, createdMonth: month)
             try pocket.insert(db)
             return c
         }
@@ -23,9 +26,9 @@ public extension AppDatabase {
 
     // MARK: Mes
 
-    /// Inicia las finanzas de un mes: crea la proyección con los aportes sugeridos,
-    /// las cuotas activas y precarga las fuentes recurrentes como pendientes.
-    /// Es idempotente: si ya existe la proyección solo completa lo que falte.
+    /// Instancia un mes a partir de las plantillas: aportes sugeridos de fondos, cuotas activas,
+    /// consumibles y fuentes recurrentes como ingresos pendientes.
+    /// Idempotente: si la proyección ya existe solo completa los ingresos recurrentes que falten.
     @discardableResult
     func startMonth(_ month: YearMonth) throws -> Projection {
         try write { db in
@@ -41,43 +44,44 @@ public extension AppDatabase {
                     var c = Contribution(projectionId: projection.id!, fundId: f.id!, amount: f.defaultContribution, date: month.firstDay)
                     try c.insert(db)
                 }
-                let plans = try InstallmentPlan.fetchAll(db)
-                for p in plans {
+                for p in try InstallmentPlan.fetchAll(db) {
                     guard let n = p.installmentNumber(in: month) else { continue }
                     var cm = Commitment(projectionId: projection.id!, kind: .debt, name: "\(p.name) (\(n)/\(p.installmentCount))",
                                         amount: p.monthlyAmount, date: month.firstDay, installmentPlanId: p.id)
                     try cm.insert(db)
                 }
+                let templates = try ConsumableTemplate.filter(Column("isArchived") == false).order(Column("sortOrder")).fetchAll(db)
+                for t in templates {
+                    var item = Consumable(projectionId: projection.id!, templateId: t.id, name: t.name, amount: t.amount, sortOrder: t.sortOrder)
+                    try item.insert(db)
+                }
             }
 
-            // Fuentes recurrentes: copiar la estructura del último ingreso de esa fuente.
             let sources = try IncomeSource.filter(Column("isRecurring") == true && Column("isArchived") == false).fetchAll(db)
             for s in sources {
                 let exists = try Income.filter(Column("sourceId") == s.id! && Column("month") == month).fetchCount(db) > 0
                 if exists { continue }
-                let last = try Income.filter(Column("sourceId") == s.id! && Column("month") < month)
-                    .order(Column("month").desc).fetchOne(db)
                 var income = Income(sourceId: s.id!, month: month, date: month.firstDay,
-                                    grossAmount: last?.grossAmount, netAmount: last?.netAmount, status: .pending)
+                                    grossAmount: s.templateGross, netAmount: s.templateNet, status: .pending)
                 try income.insert(db)
-                if let last {
-                    for d in try IncomeDeduction.filter(Column("incomeId") == last.id!).fetchAll(db) {
-                        var copy = IncomeDeduction(incomeId: income.id!, name: d.name, kind: d.kind, value: d.value)
-                        try copy.insert(db)
-                    }
-                    for b in try IncomeBonus.filter(Column("incomeId") == last.id!).fetchAll(db) {
-                        var copy = IncomeBonus(incomeId: income.id!, name: b.name, amount: b.amount)
-                        try copy.insert(db)
-                    }
+                for d in try SourceDeduction.filter(Column("sourceId") == s.id!).fetchAll(db) {
+                    var copy = IncomeDeduction(incomeId: income.id!, name: d.name, kind: d.kind, value: d.value)
+                    try copy.insert(db)
+                }
+                for b in try SourceBonus.filter(Column("sourceId") == s.id!).fetchAll(db) {
+                    var copy = IncomeBonus(incomeId: income.id!, name: b.name, amount: b.amount)
+                    try copy.insert(db)
                 }
             }
             return projection
         }
     }
 
-    /// Guarda un ingreso con su desglose, reemplazando descuentos y bonos.
+    // MARK: Ingresos
+
+    /// Guarda un ingreso con su desglose. Si `asTemplate`, el desglose pasa a ser la plantilla de la fuente.
     @discardableResult
-    func saveIncome(_ detail: IncomeDetail) throws -> IncomeDetail {
+    func saveIncome(_ detail: IncomeDetail, asTemplate: Bool = false) throws -> IncomeDetail {
         try write { db in
             var income = detail.income
             try income.save(db)
@@ -96,7 +100,182 @@ public extension AppDatabase {
                 try copy.insert(db)
                 bonuses.append(copy)
             }
+
+            if asTemplate, var source = try IncomeSource.fetchOne(db, id: income.sourceId) {
+                source.templateGross = income.grossAmount
+                source.templateNet = income.netAmount
+                try source.update(db)
+                try SourceDeduction.filter(Column("sourceId") == source.id!).deleteAll(db)
+                try SourceBonus.filter(Column("sourceId") == source.id!).deleteAll(db)
+                for d in detail.deductions {
+                    var copy = SourceDeduction(sourceId: source.id!, name: d.name, kind: d.kind, value: d.value)
+                    try copy.insert(db)
+                }
+                for b in detail.bonuses {
+                    var copy = SourceBonus(sourceId: source.id!, name: b.name, amount: b.amount)
+                    try copy.insert(db)
+                }
+            }
             return IncomeDetail(income: income, deductions: deductions, bonuses: bonuses)
+        }
+    }
+
+    // MARK: Aportes
+
+    /// Guarda un aporte. Si `asTemplate`, el monto queda como aporte sugerido del fondo.
+    func saveContribution(_ contribution: Contribution, asTemplate: Bool) throws {
+        try write { db in
+            var c = contribution
+            try c.save(db)
+            if asTemplate, var fund = try Fund.fetchOne(db, id: c.fundId) {
+                fund.defaultContribution = c.amount
+                try fund.update(db)
+            }
+        }
+    }
+
+    /// Borra aportes. Si `asTemplate`, los fondos afectados dejan de sugerir aporte.
+    func deleteContributions(ids: [Int64], asTemplate: Bool) throws {
+        try write { db in
+            let items = try Contribution.filter(ids: ids).fetchAll(db)
+            try Contribution.deleteAll(db, ids: ids)
+            guard asTemplate else { return }
+            for fundId in Set(items.map(\.fundId)) {
+                if var fund = try Fund.fetchOne(db, id: fundId) {
+                    fund.defaultContribution = 0
+                    try fund.update(db)
+                }
+            }
+        }
+    }
+
+    // MARK: Movimientos manuales de fondos
+
+    /// Mete o saca plata de un fondo. Si `counterpartFundId` está, es un traslado: sale de uno y entra al otro.
+    func adjustFund(_ fundId: Int64, amount: Int64, date: DayDate, reason: String, counterpartFundId: Int64? = nil) throws {
+        try write { db in
+            let pair = counterpartFundId == nil ? nil : UUID().uuidString
+            var a = FundAdjustment(fundId: fundId, date: date, amount: amount, reason: reason, pairId: pair)
+            try a.insert(db)
+            if let other = counterpartFundId {
+                var b = FundAdjustment(fundId: other, date: date, amount: -amount, reason: reason, pairId: pair)
+                try b.insert(db)
+            }
+        }
+    }
+
+    /// Borra un movimiento manual y su contraparte si era un traslado.
+    func deleteAdjustment(id: Int64) throws {
+        try write { db in
+            guard let a = try FundAdjustment.fetchOne(db, id: id) else { return }
+            if let pair = a.pairId {
+                try FundAdjustment.filter(Column("pairId") == pair).deleteAll(db)
+            } else {
+                try a.delete(db)
+            }
+        }
+    }
+
+    // MARK: Consumibles
+
+    /// Guarda un consumible del mes. Si `asTemplate`, crea o actualiza su plantilla.
+    func saveConsumable(_ item: Consumable, asTemplate: Bool) throws {
+        try write { db in
+            var c = item
+            if asTemplate {
+                if let tid = c.templateId, var t = try ConsumableTemplate.fetchOne(db, id: tid) {
+                    t.name = c.name
+                    t.amount = c.amount
+                    t.isArchived = false
+                    try t.update(db)
+                } else {
+                    let order = try ConsumableTemplate.fetchCount(db)
+                    var t = ConsumableTemplate(name: c.name, amount: c.amount, sortOrder: order)
+                    try t.insert(db)
+                    c.templateId = t.id
+                    if c.id == nil { c.sortOrder = order }
+                }
+            } else if c.id == nil {
+                c.sortOrder = try Consumable.filter(Column("projectionId") == c.projectionId).fetchCount(db)
+            }
+            try c.save(db)
+        }
+    }
+
+    /// Borra consumibles del mes. Si `asTemplate`, archiva sus plantillas para que no vuelvan a aparecer.
+    func deleteConsumables(ids: [Int64], asTemplate: Bool) throws {
+        try write { db in
+            let items = try Consumable.filter(ids: ids).fetchAll(db)
+            try Consumable.deleteAll(db, ids: ids)
+            guard asTemplate else { return }
+            for tid in items.compactMap(\.templateId) {
+                if var t = try ConsumableTemplate.fetchOne(db, id: tid) {
+                    t.isArchived = true
+                    try t.update(db)
+                }
+            }
+        }
+    }
+
+    func setConsumablePaid(id: Int64, paid: Bool, on date: DayDate) throws {
+        try write { db in
+            guard var c = try Consumable.fetchOne(db, id: id) else { return }
+            c.isPaid = paid
+            c.paidDate = paid ? date : nil
+            try c.update(db)
+        }
+    }
+
+    // MARK: Proyección
+
+    /// Copia aportes, compromisos y consumibles de un mes a otro, reemplazando los del destino.
+    func copyProjection(from source: YearMonth, to target: YearMonth) throws {
+        try write { db in
+            guard let src = try Projection.filter(Column("month") == source).fetchOne(db) else { return }
+            var dst: Projection
+            if let existing = try Projection.filter(Column("month") == target).fetchOne(db) {
+                dst = existing
+            } else {
+                dst = Projection(month: target)
+                try dst.insert(db)
+            }
+            try Contribution.filter(Column("projectionId") == dst.id!).deleteAll(db)
+            try Commitment.filter(Column("projectionId") == dst.id!).deleteAll(db)
+            try Consumable.filter(Column("projectionId") == dst.id!).deleteAll(db)
+            for c in try Contribution.filter(Column("projectionId") == src.id!).fetchAll(db) {
+                var copy = Contribution(projectionId: dst.id!, fundId: c.fundId, amount: c.amount, date: target.firstDay)
+                try copy.insert(db)
+            }
+            for c in try Commitment.filter(Column("projectionId") == src.id!).fetchAll(db) {
+                if let planId = c.installmentPlanId {
+                    guard let plan = try InstallmentPlan.fetchOne(db, id: planId), let n = plan.installmentNumber(in: target) else { continue }
+                    var copy = Commitment(projectionId: dst.id!, kind: .debt, name: "\(plan.name) (\(n)/\(plan.installmentCount))",
+                                          amount: plan.monthlyAmount, date: target.firstDay, installmentPlanId: planId)
+                    try copy.insert(db)
+                } else {
+                    var copy = Commitment(projectionId: dst.id!, kind: c.kind, name: c.name, amount: c.amount, date: target.firstDay)
+                    try copy.insert(db)
+                }
+            }
+            for c in try Consumable.filter(Column("projectionId") == src.id!).fetchAll(db) {
+                var copy = Consumable(projectionId: dst.id!, templateId: c.templateId, name: c.name, amount: c.amount, sortOrder: c.sortOrder)
+                try copy.insert(db)
+            }
+        }
+    }
+
+    // MARK: Tarjetas: pagos
+
+    /// Registra un pago de tarjeta y, si se pide, marca como pagados los gastos pendientes hasta una fecha.
+    func payCard(_ payment: CardPayment, markPaidThrough: DayDate?) throws {
+        try write { db in
+            var p = payment
+            try p.insert(db)
+            if let through = markPaidThrough {
+                try CardExpense
+                    .filter(Column("cardId") == payment.cardId && Column("isPaid") == false && Column("date") <= through)
+                    .updateAll(db, Column("isPaid").set(to: true))
+            }
         }
     }
 
@@ -112,53 +291,6 @@ public extension AppDatabase {
                 try Setting(key: key, value: value).save(db)
             } else {
                 _ = try Setting.deleteOne(db, key: key)
-            }
-        }
-    }
-}
-
-public extension AppDatabase {
-    /// Copia aportes y compromisos de la proyección de un mes a otro, reemplazando los del destino.
-    func copyProjection(from source: YearMonth, to target: YearMonth) throws {
-        try write { db in
-            guard let src = try Projection.filter(Column("month") == source).fetchOne(db) else { return }
-            var dst: Projection
-            if let existing = try Projection.filter(Column("month") == target).fetchOne(db) {
-                dst = existing
-            } else {
-                dst = Projection(month: target)
-                try dst.insert(db)
-            }
-            try Contribution.filter(Column("projectionId") == dst.id!).deleteAll(db)
-            try Commitment.filter(Column("projectionId") == dst.id!).deleteAll(db)
-            for c in try Contribution.filter(Column("projectionId") == src.id!).fetchAll(db) {
-                var copy = Contribution(projectionId: dst.id!, fundId: c.fundId, amount: c.amount, date: target.firstDay)
-                try copy.insert(db)
-            }
-            for c in try Commitment.filter(Column("projectionId") == src.id!).fetchAll(db) {
-                // Las cuotas se recalculan según el plan; lo demás se copia tal cual.
-                if let planId = c.installmentPlanId {
-                    guard let plan = try InstallmentPlan.fetchOne(db, id: planId), let n = plan.installmentNumber(in: target) else { continue }
-                    var copy = Commitment(projectionId: dst.id!, kind: .debt, name: "\(plan.name) (\(n)/\(plan.installmentCount))",
-                                          amount: plan.monthlyAmount, date: target.firstDay, installmentPlanId: planId)
-                    try copy.insert(db)
-                } else {
-                    var copy = Commitment(projectionId: dst.id!, kind: c.kind, name: c.name, amount: c.amount, date: target.firstDay)
-                    try copy.insert(db)
-                }
-            }
-        }
-    }
-
-    /// Registra un pago de tarjeta y, si se pide, marca como pagados los gastos pendientes hasta una fecha.
-    func payCard(_ payment: CardPayment, markPaidThrough: DayDate?) throws {
-        try write { db in
-            var p = payment
-            try p.insert(db)
-            if let through = markPaidThrough {
-                try CardExpense
-                    .filter(Column("cardId") == payment.cardId && Column("isPaid") == false && Column("date") <= through)
-                    .updateAll(db, Column("isPaid").set(to: true))
             }
         }
     }

@@ -43,7 +43,7 @@ struct Fixture {
             deductions: [.init(incomeId: 0, name: "Salud", kind: .percent, value: 400), .init(incomeId: 0, name: "Pensión", kind: .percent, value: 400)],
             bonuses: [.init(incomeId: 0, name: "Auxilio transporte", amount: 232_489)]
         )
-        try f.db.saveIncome(octIncome)
+        try f.db.saveIncome(octIncome, asTemplate: true)
 
         try f.db.startMonth(f.nov)
         try f.db.startMonth(f.nov) // idempotente

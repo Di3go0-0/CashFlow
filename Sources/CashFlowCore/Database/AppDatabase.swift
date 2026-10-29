@@ -164,6 +164,68 @@ public final class AppDatabase: Sendable {
                 t.column("value", .text).notNull()
             }
         }
+        m.registerMigration("v2") { db in
+            try db.alter(table: "fund") { t in
+                t.add(column: "createdMonth", .text).notNull().defaults(to: YearMonth.current().key)
+            }
+            try db.alter(table: "incomeSource") { t in
+                t.add(column: "templateGross", .integer)
+                t.add(column: "templateNet", .integer)
+            }
+            try db.create(table: "sourceDeduction") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("sourceId", .integer).notNull().indexed().references("incomeSource", onDelete: .cascade)
+                t.column("name", .text).notNull()
+                t.column("kind", .text).notNull()
+                t.column("value", .integer).notNull()
+            }
+            try db.create(table: "sourceBonus") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("sourceId", .integer).notNull().indexed().references("incomeSource", onDelete: .cascade)
+                t.column("name", .text).notNull()
+                t.column("amount", .integer).notNull()
+            }
+            try db.create(table: "fundAdjustment") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("fund", onDelete: .cascade).notNull()
+                t.column("date", .text).notNull().indexed()
+                t.column("amount", .integer).notNull()
+                t.column("reason", .text).notNull().defaults(to: "")
+                t.column("pairId", .text).indexed()
+            }
+            try db.create(table: "consumableTemplate") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("amount", .integer).notNull()
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+                t.column("isArchived", .boolean).notNull().defaults(to: false)
+            }
+            try db.create(table: "consumable") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("projection", onDelete: .cascade).notNull()
+                t.column("templateId", .integer).indexed().references("consumableTemplate", onDelete: .setNull)
+                t.column("name", .text).notNull()
+                t.column("amount", .integer).notNull()
+                t.column("isPaid", .boolean).notNull().defaults(to: false)
+                t.column("paidDate", .text)
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+            }
+            // Sembrar la plantilla de cada fuente con su último ingreso registrado.
+            for var source in try IncomeSource.fetchAll(db) {
+                guard let last = try Income.filter(Column("sourceId") == source.id!).order(Column("month").desc).fetchOne(db) else { continue }
+                source.templateGross = last.grossAmount
+                source.templateNet = last.netAmount
+                try source.update(db)
+                for d in try IncomeDeduction.filter(Column("incomeId") == last.id!).fetchAll(db) {
+                    var copy = SourceDeduction(sourceId: source.id!, name: d.name, kind: d.kind, value: d.value)
+                    try copy.insert(db)
+                }
+                for b in try IncomeBonus.filter(Column("incomeId") == last.id!).fetchAll(db) {
+                    var copy = SourceBonus(sourceId: source.id!, name: b.name, amount: b.amount)
+                    try copy.insert(db)
+                }
+            }
+        }
         return m
     }
 }

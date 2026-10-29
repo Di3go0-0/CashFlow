@@ -111,4 +111,42 @@ public enum MoneyFormat {
             return Exchange.minorUnits(from: d, currency: .usd)
         }
     }
+
+    /// Formatea mientras el usuario escribe. Devuelve el texto a mostrar y el valor en unidad menor.
+    /// COP: solo dígitos, agrupados con punto. USD: el último `,` o `.` seguido de 0 a 2 dígitos es el
+    /// separador decimal; el resto son miles. Se muestra con punto de miles y coma decimal.
+    public static func liveFormat(_ raw: String, currency: Currency) -> (text: String, minor: Int64?) {
+        func group(_ digits: String) -> String {
+            var out = ""
+            for (i, ch) in digits.reversed().enumerated() {
+                if i > 0 && i % 3 == 0 { out.append(".") }
+                out.append(ch)
+            }
+            return String(out.reversed())
+        }
+        func stripLeadingZeros(_ d: String) -> String {
+            let t = d.drop { $0 == "0" }
+            return t.isEmpty ? (d.isEmpty ? "" : "0") : String(t)
+        }
+        let allDigits = raw.filter(\.isNumber)
+        switch currency {
+        case .cop:
+            let d = stripLeadingZeros(allDigits)
+            guard !d.isEmpty else { return ("", nil) }
+            return (group(d), Int64(d))
+        case .usd:
+            if let sepIndex = raw.lastIndex(where: { $0 == "," || $0 == "." }) {
+                let after = raw[raw.index(after: sepIndex)...].filter(\.isNumber)
+                if after.count <= 2 {
+                    let before = stripLeadingZeros(raw[..<sepIndex].filter(\.isNumber))
+                    let intPart = before.isEmpty ? "0" : before
+                    let cents = (Int64(intPart) ?? 0) * 100 + (Int64(after.padding(toLength: 2, withPad: "0", startingAt: 0)) ?? 0)
+                    return (group(intPart) + "," + after, cents)
+                }
+            }
+            let d = stripLeadingZeros(allDigits)
+            guard !d.isEmpty else { return ("", nil) }
+            return (group(d), (Int64(d) ?? 0) * 100)
+        }
+    }
 }

@@ -16,7 +16,7 @@ struct SummaryView: View {
                 MonthSwitcher(month: $model.month)
             }
 
-            if model.projection == nil {
+            if model.projection == nil && !model.isCurrentMonth {
                 Section {
                     Button {
                         model.startMonth()
@@ -24,7 +24,7 @@ struct SummaryView: View {
                         Label("Iniciar \(model.month.monthName)", systemImage: "play.circle")
                     }
                 } footer: {
-                    Text("Crea la proyección con los aportes sugeridos de cada fondo y precarga las fuentes de ingreso recurrentes.")
+                    Text("Instancia el mes con las plantillas actuales: aportes a fondos, consumibles, cuotas y fuentes recurrentes.")
                 }
             }
 
@@ -33,6 +33,10 @@ struct SummaryView: View {
                          subtitle: s.pendingIncome > 0 ? "Pendiente: \(MoneyFormat.cop(s.pendingIncome))" : nil)
                 MoneyRow(title: "Gastado", amount: s.spent)
                 MoneyRow(title: "Ahorrado", amount: s.saved, color: .green)
+                if s.consumablesTotal > 0 {
+                    MoneyRow(title: "Consumibles por pagar", amount: s.consumablesPending,
+                             subtitle: "Pagado \(MoneyFormat.cop(s.consumablesPaid)) de \(MoneyFormat.cop(s.consumablesTotal))")
+                }
             }
 
             Section("Saldo extra") {

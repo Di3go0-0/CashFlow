@@ -1,6 +1,18 @@
 import Foundation
 import GRDB
 
+/// Calendario de la app: gregoriano en hora de Colombia.
+public enum AppCalendar {
+    public static let timeZone = TimeZone(identifier: "America/Bogota")!
+
+    public static var calendar: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = timeZone
+        c.locale = Locale(identifier: "es_CO")
+        return c
+    }
+}
+
 /// Un mes calendario. Se guarda como "2026-11".
 public struct YearMonth: Hashable, Comparable, Sendable, CustomStringConvertible {
     public var year: Int
@@ -47,7 +59,7 @@ public struct YearMonth: Hashable, Comparable, Sendable, CustomStringConvertible
 
     public func contains(_ d: DayDate) -> Bool { d.year == year && d.month == month }
 
-    public static func current(calendar: Calendar = .current, now: Date = Date()) -> YearMonth {
+    public static func current(calendar: Calendar = AppCalendar.calendar, now: Date = Date()) -> YearMonth {
         let c = calendar.dateComponents([.year, .month], from: now)
         return YearMonth(year: c.year!, month: c.month!)
     }
@@ -103,12 +115,12 @@ public struct DayDate: Hashable, Comparable, Sendable, CustomStringConvertible {
         self.init(year: y, month: m, day: d)
     }
 
-    public init(_ date: Date, calendar: Calendar = .current) {
+    public init(_ date: Date, calendar: Calendar = AppCalendar.calendar) {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         self.init(year: c.year!, month: c.month!, day: c.day!)
     }
 
-    public static func today(calendar: Calendar = .current) -> DayDate {
+    public static func today(calendar: Calendar = AppCalendar.calendar) -> DayDate {
         DayDate(Date(), calendar: calendar)
     }
 
@@ -121,7 +133,7 @@ public struct DayDate: Hashable, Comparable, Sendable, CustomStringConvertible {
     }
 
     /// Fecha a mediodía en la zona horaria del calendario (evita saltos por horario de verano).
-    public func date(calendar: Calendar = .current) -> Date {
+    public func date(calendar: Calendar = AppCalendar.calendar) -> Date {
         var c = DateComponents()
         c.year = year
         c.month = month
