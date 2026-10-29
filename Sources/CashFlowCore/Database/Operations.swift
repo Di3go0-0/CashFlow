@@ -264,13 +264,57 @@ public extension AppDatabase {
         }
     }
 
+    // MARK: Gastos sin tarjeta
+
+    /// Guarda un gasto. Si paga un ítem de consumible, lo marca pagado en la fecha del gasto.
+    func saveExpense(_ expense: Expense) throws {
+        try write { db in
+            var e = expense
+            e.recomputeCOP()
+            if e.fromConsumables { e.fundId = nil }
+            if let old = e.id.flatMap({ try? Expense.fetchOne(db, id: $0) }), let oldC = old.consumableId, oldC != e.consumableId,
+               var c = try Consumable.fetchOne(db, id: oldC) {
+                c.isPaid = false
+                c.paidDate = nil
+                try c.update(db)
+            }
+            try e.save(db)
+            if let cid = e.consumableId, var c = try Consumable.fetchOne(db, id: cid) {
+                c.isPaid = true
+                c.paidDate = e.date
+                try c.update(db)
+            }
+        }
+    }
+
+    /// Borra gastos. Los ítems de consumible que pagaban vuelven a pendientes.
+    func deleteExpenses(ids: [Int64]) throws {
+        try write { db in
+            let items = try Expense.filter(ids: ids).fetchAll(db)
+            try Expense.deleteAll(db, ids: ids)
+            for cid in items.compactMap(\.consumableId) {
+                if var c = try Consumable.fetchOne(db, id: cid) {
+                    c.isPaid = false
+                    c.paidDate = nil
+                    try c.update(db)
+                }
+            }
+        }
+    }
+
     // MARK: Tarjetas: abonos
 
     /// Guarda un abono. Si viene de un consumible, lo marca pagado en la fecha del abono.
     func saveAllocation(_ allocation: CardAllocation) throws {
         try write { db in
             var a = allocation
-            if a.consumableId != nil { a.fundId = nil }
+            if a.fromConsumables { a.fundId = nil }
+            if let old = a.id.flatMap({ try? CardAllocation.fetchOne(db, id: $0) }), let oldC = old.consumableId, oldC != a.consumableId,
+               var c = try Consumable.fetchOne(db, id: oldC) {
+                c.isPaid = false
+                c.paidDate = nil
+                try c.update(db)
+            }
             try a.save(db)
             if let cid = a.consumableId, var c = try Consumable.fetchOne(db, id: cid) {
                 c.isPaid = true

@@ -33,8 +33,9 @@ struct SummaryView: View {
                 MoneyRow(title: "Gastado", amount: s.spent)
                 MoneyRow(title: "Ahorrado", amount: s.saved, color: .green)
                 if s.consumablesTotal > 0 {
-                    MoneyRow(title: "Consumibles por pagar", amount: s.consumablesPending,
-                             subtitle: "Pagado \(MoneyFormat.cop(s.consumablesPaid)) de \(MoneyFormat.cop(s.consumablesTotal))")
+                    MoneyRow(title: "Queda de consumibles", amount: s.consumablesPending,
+                             color: s.consumablesPending < 0 ? .red : .primary,
+                             subtitle: "Apartado \(MoneyFormat.cop(s.consumablesTotal)) · ítems por pagar \(MoneyFormat.cop(s.consumablesUnpaid))")
                 }
             }
 

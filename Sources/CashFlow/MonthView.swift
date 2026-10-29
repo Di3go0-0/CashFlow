@@ -198,7 +198,7 @@ struct MonthView: View {
                 Text("Consumibles")
                 Spacer()
                 let s = model.summary
-                Text("Por pagar \(MoneyFormat.cop(s.consumablesPending)) de \(MoneyFormat.cop(s.consumablesTotal))")
+                Text("Quedan \(MoneyFormat.cop(s.consumablesPending)) · sin pagar \(MoneyFormat.cop(s.consumablesUnpaid))")
             }
         }
     }

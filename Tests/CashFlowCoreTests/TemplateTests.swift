@@ -149,7 +149,7 @@ import GRDB
         let paid = snap.consumable(item.id)!
         #expect(paid.isPaid && paid.paidDate == DayDate(year: 2026, month: 11, day: 4))
         var s = snap.monthSummary(f.nov)
-        #expect(s.consumablesPending == 0)
+        #expect(s.consumablesPending == 0 && s.consumablesUnpaid == 0)
         #expect(s.spent == 31_000)          // solo el gasto de tarjeta, no doble
         #expect(s.spentFromExtra == 0)      // no salió del saldo extra
         let st = snap.cardStatus(f.unica, asOf: DayDate(year: 2026, month: 11, day: 10))
@@ -160,6 +160,31 @@ import GRDB
         snap = try f.db.snapshot()
         #expect(snap.consumable(item.id)?.isPaid == false)
         s = snap.monthSummary(f.nov)
-        #expect(s.consumablesPending == 31_000)
+        #expect(s.consumablesPending == 31_000 && s.consumablesUnpaid == 31_000)
+    }
+
+    @Test func consumablesPoolTracksSpentAndUnpaidSeparately() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Gimnasio", amount: 90_000), asTemplate: true)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Parqueadero", amount: 50_000), asTemplate: true)
+        let gym = try f.db.snapshot().consumables(for: f.nov).first { $0.name == "Gimnasio" }!
+        // Gasto ligado al ítem y gasto suelto del apartado.
+        try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 11, day: 6), amount: 90_000, currency: .cop, reason: "Gimnasio", fundId: nil, consumableId: gym.id))
+        try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 11, day: 7), amount: 20_000, currency: .cop, reason: "Triciclo", fundId: nil, fromConsumables: true))
+        var s = try f.db.snapshot().monthSummary(f.nov)
+        #expect(s.consumablesTotal == 140_000)
+        #expect(s.consumablesSpent == 110_000)
+        #expect(s.consumablesPending == 30_000)   // queda del apartado
+        #expect(s.consumablesUnpaid == 50_000)    // parqueadero sin pagar
+        #expect(s.spent == 110_000)               // sin doble conteo
+        #expect(s.spentFromExtra == 0)
+        #expect(try f.db.snapshot().consumable(gym.id)?.isPaid == true)
+
+        let e = try f.db.snapshot().expenses.first { $0.consumableId == gym.id }!
+        try f.db.deleteExpenses(ids: [e.id!])
+        s = try f.db.snapshot().monthSummary(f.nov)
+        #expect(try f.db.snapshot().consumable(gym.id)?.isPaid == false)
+        #expect(s.consumablesUnpaid == 140_000 && s.consumablesPending == 120_000)
     }
 }

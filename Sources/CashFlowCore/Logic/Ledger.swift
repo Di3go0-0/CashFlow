@@ -63,8 +63,17 @@ public struct Snapshot: Sendable {
 
     /// Nombre legible de la fuente de un abono.
     public func allocationSourceName(_ a: CardAllocation) -> String {
-        if let c = consumable(a.consumableId) { return "Consumible: \(c.name)" }
-        if let f = fund(a.fundId) { return f.name }
+        sourceName(fundId: a.fundId, fromConsumables: a.fromConsumables, consumableId: a.consumableId)
+    }
+
+    public func expenseSourceName(_ e: Expense) -> String {
+        sourceName(fundId: e.fundId, fromConsumables: e.fromConsumables, consumableId: e.consumableId)
+    }
+
+    public func sourceName(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?) -> String {
+        if let c = consumable(consumableId) { return "Consumible: \(c.name)" }
+        if fromConsumables { return "Consumibles" }
+        if let f = fund(fundId) { return f.name }
         return "Saldo extra"
     }
 }
@@ -161,8 +170,12 @@ public struct MonthSummary: Hashable, Sendable {
     public var necessary: Int64
     /// Total de consumibles del mes: se aparta completo al proyectar.
     public var consumablesTotal: Int64
-    /// Consumibles ya pagados.
+    /// Ítems de consumibles ya pagados (por su valor).
     public var consumablesPaid: Int64
+    /// Lo que salió del apartado: gastos y abonos marcados como consumibles, más ítems pagados por otro medio.
+    public var consumablesSpent: Int64
+    /// Ítems sin pagar.
+    public var consumablesUnpaid: Int64
     /// Aportes a fondos con bandera de ahorro.
     public var saved: Int64
     /// Gastos sin tarjeta + gastos con tarjeta + deudas + necesarios + consumibles pagados.
@@ -170,8 +183,8 @@ public struct MonthSummary: Hashable, Sendable {
     /// Gastos y abonos que salieron del saldo extra.
     public var spentFromExtra: Int64
 
-    /// Lo apartado para consumibles que todavía no se ha gastado.
-    public var consumablesPending: Int64 { consumablesTotal - consumablesPaid }
+    /// Lo que queda del apartado de consumibles.
+    public var consumablesPending: Int64 { consumablesTotal - consumablesSpent }
     public var committed: Int64 { contributions + debts + necessary + consumablesTotal }
     /// Lo que queda del ingreso después de repartirlo.
     public var extraBalance: Int64 { income - committed }
@@ -197,19 +210,25 @@ public extension Snapshot {
         let cons = consumables(for: month)
         let consTotal = cons.reduce(0) { $0 + $1.amount }
         let consPaid = cons.filter(\.isPaid).reduce(0) { $0 + $1.amount }
-        // Un consumible pagado con un abono de tarjeta ya está contado en el gasto de tarjeta.
-        let linked = Set(allocations.compactMap(\.consumableId))
-        let consPaidDirect = cons.filter { $0.isPaid && !linked.contains($0.id!) }.reduce(0) { $0 + $1.amount }
-
+        let consUnpaid = consTotal - consPaid
         let ex = expenses.filter { month.contains($0.date) }
         let cex = cardExpenses.filter { month.contains($0.date) }
+        let monthAllocs = allocations.filter { month.contains($0.date) }
+        // Un ítem pagado con un gasto o abono ligado ya está contado ahí; los demás pagados cuentan por su valor.
+        let linked = Set(allocations.compactMap(\.consumableId) + expenses.compactMap(\.consumableId))
+        let consPaidDirect = cons.filter { $0.isPaid && !linked.contains($0.id!) }.reduce(0) { $0 + $1.amount }
+        let consSpent = ex.filter(\.fromConsumables).reduce(0) { $0 + $1.amountCOP }
+            + monthAllocs.filter(\.fromConsumables).reduce(0) { $0 + $1.amount }
+            + consPaidDirect
+
         let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + debts + necessary + consPaidDirect
 
-        let fromExtra = ex.filter { $0.fundId == nil }.reduce(0) { $0 + $1.amountCOP }
-            + allocations.filter { $0.isFromExtra && month.contains($0.date) }.reduce(0) { $0 + $1.amount }
+        let fromExtra = ex.filter(\.isFromExtra).reduce(0) { $0 + $1.amountCOP }
+            + monthAllocs.filter(\.isFromExtra).reduce(0) { $0 + $1.amount }
 
         return MonthSummary(month: month, income: income, pendingIncome: pending, contributions: contributed,
                             debts: debts, necessary: necessary, consumablesTotal: consTotal, consumablesPaid: consPaid,
+                            consumablesSpent: consSpent, consumablesUnpaid: consUnpaid,
                             saved: saved, spent: spent, spentFromExtra: fromExtra)
     }
 }

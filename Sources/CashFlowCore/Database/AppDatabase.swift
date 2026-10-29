@@ -231,6 +231,16 @@ public final class AppDatabase: Sendable {
                 t.add(column: "consumableId", .integer).indexed().references("consumable", onDelete: .setNull)
             }
         }
+        m.registerMigration("v4") { db in
+            try db.alter(table: "expense") { t in
+                t.add(column: "fromConsumables", .boolean).notNull().defaults(to: false)
+                t.add(column: "consumableId", .integer).indexed().references("consumable", onDelete: .setNull)
+            }
+            try db.alter(table: "cardAllocation") { t in
+                t.add(column: "fromConsumables", .boolean).notNull().defaults(to: false)
+            }
+            try db.execute(sql: "UPDATE cardAllocation SET fromConsumables = 1 WHERE consumableId IS NOT NULL")
+        }
         return m
     }
 }

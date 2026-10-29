@@ -36,5 +36,11 @@ let package = Package(
             name: "CashFlowCoreTests",
             dependencies: ["CashFlowCore"]
         ),
+        // Herramienta de línea de comandos para cargar datos en una copia de la base. Solo corre en Linux/macOS.
+        .executableTarget(
+            name: "CashFlowSeed",
+            dependencies: ["CashFlowCore"],
+            path: "Tools/Seed"
+        ),
     ]
 )

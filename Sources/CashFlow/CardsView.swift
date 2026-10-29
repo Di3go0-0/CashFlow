@@ -350,77 +350,32 @@ struct CardExpenseEditView: View {
     }
 }
 
-/// Fuente de un abono.
-enum AllocationSource: Hashable {
-    case extra
-    case fund(Int64)
-    case consumable(Int64)
-
-    init(_ a: CardAllocation) {
-        if let c = a.consumableId { self = .consumable(c) }
-        else if let f = a.fundId { self = .fund(f) }
-        else { self = .extra }
-    }
-}
-
 struct AllocationEditView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State var allocation: CardAllocation
-    @State private var source: AllocationSource = .extra
-
-    private var pendingConsumables: [Consumable] {
-        model.consumables().filter { !$0.isPaid || $0.id == allocation.consumableId }
-    }
+    @State private var source: MoneySource = .extra
 
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Sale de", selection: $source) {
-                    Text("Saldo extra del mes").tag(AllocationSource.extra)
-                    if !pendingConsumables.isEmpty {
-                        Section("Consumibles de \(model.month.monthName)") {
-                            ForEach(pendingConsumables) { c in
-                                Text("\(c.name) · \(MoneyFormat.cop(c.amount))").tag(AllocationSource.consumable(c.id!))
-                            }
-                        }
+                SourcePicker(source: $source, currentConsumableId: allocation.consumableId)
+                    .onChange(of: source) { _, new in
+                        allocation.fundId = new.fundId
+                        allocation.consumableId = new.consumableId
+                        allocation.fromConsumables = new.fromConsumables
+                        if let id = new.consumableId, let c = model.snapshot.consumable(id) { allocation.amount = c.amount }
                     }
-                    Section("Fondos") {
-                        ForEach(model.activeFunds) { f in
-                            Text(f.name).tag(AllocationSource.fund(f.id!))
-                        }
-                    }
-                }
-                .onChange(of: source) { _, new in
-                    switch new {
-                    case .extra:
-                        allocation.fundId = nil
-                        allocation.consumableId = nil
-                    case .fund(let id):
-                        allocation.fundId = id
-                        allocation.consumableId = nil
-                    case .consumable(let id):
-                        allocation.fundId = nil
-                        allocation.consumableId = id
-                        if let c = model.snapshot.consumable(id) { allocation.amount = c.amount }
-                    }
-                }
                 MoneyField(title: "Monto", amount: $allocation.amount)
                     .id(source)
                 DayDatePicker(title: "Fecha", day: $allocation.date)
-                switch source {
-                case .extra:
-                    MoneyRow(title: "Restante del saldo extra", amount: model.summary.remaining)
-                case .fund(let id):
-                    MoneyRow(title: "Saldo del fondo", amount: model.snapshot.balance(of: id, asOf: model.today))
-                case .consumable:
-                    MoneyRow(title: "Consumibles por pagar", amount: model.summary.consumablesPending,
-                             subtitle: "El consumible quedará marcado como pagado")
-                }
+                SourceBalanceRow(source: source)
             }
             .navigationTitle("Abono")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { source = AllocationSource(allocation) }
+            .onAppear {
+                source = MoneySource(fundId: allocation.fundId, fromConsumables: allocation.fromConsumables, consumableId: allocation.consumableId)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

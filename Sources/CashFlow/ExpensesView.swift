@@ -92,7 +92,7 @@ struct ExpensesView: View {
             }
             .onDelete { idx in
                 let ids = idx.map { items[$0].id! }
-                model.write { db in try Expense.deleteAll(db, ids: ids) }
+                model.perform { try model.db.deleteExpenses(ids: ids) }
             }
         } header: {
             HStack {
@@ -134,7 +134,7 @@ struct ExpenseRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(expense.reason.isEmpty ? "Sin descripción" : expense.reason)
-                Text("\(expense.date.shortDisplay) · \(model.fundName(expense.fundId))").font(.caption).foregroundStyle(.secondary)
+                Text("\(expense.date.shortDisplay) · \(model.snapshot.expenseSourceName(expense))").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             VStack(alignment: .trailing) {
@@ -176,6 +176,7 @@ struct ExpenseEditView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var expense: Expense
+    @State private var source: MoneySource = .extra
     private let isNew: Bool
 
     init(expense: Expense?) {
@@ -198,21 +199,31 @@ struct ExpenseEditView: View {
                 Section {
                     TextField("Razón", text: $expense.reason)
                     DayDatePicker(title: "Fecha", day: $expense.date)
-                    FundPicker(title: "Sale de", fundId: $expense.fundId)
+                    SourcePicker(source: $source, currentConsumableId: expense.consumableId)
+                        .onChange(of: source) { _, new in
+                            expense.fundId = new.fundId
+                            expense.consumableId = new.consumableId
+                            expense.fromConsumables = new.fromConsumables
+                            if let id = new.consumableId, let c = model.snapshot.consumable(id) {
+                                if expense.reason.isEmpty { expense.reason = c.name }
+                                if expense.currency == .cop && expense.amount == 0 { expense.amount = c.amount }
+                            }
+                        }
+                    SourceBalanceRow(source: source)
                 }
             }
             .navigationTitle(isNew ? "Nuevo gasto" : "Gasto")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if isNew { expense.date = model.defaultDate }
+                source = MoneySource(fundId: expense.fundId, fromConsumables: expense.fromConsumables, consumableId: expense.consumableId)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
-                        var e = expense
-                        e.recomputeCOP()
-                        if model.write({ db in var e = e; try e.save(db) }) { dismiss() }
+                        let e = expense
+                        if model.perform({ try model.db.saveExpense(e) }) { dismiss() }
                     }
                     .disabled(expense.amount <= 0 || (expense.currency == .usd && (expense.rate ?? 0) <= 0))
                 }

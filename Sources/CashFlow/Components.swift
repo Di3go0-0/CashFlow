@@ -175,6 +175,80 @@ struct FundPicker: View {
     }
 }
 
+/// Origen del dinero de un gasto o abono.
+enum MoneySource: Hashable {
+    case extra
+    case consumables
+    case consumable(Int64)
+    case fund(Int64)
+
+    init(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?) {
+        if let c = consumableId { self = .consumable(c) }
+        else if fromConsumables { self = .consumables }
+        else if let f = fundId { self = .fund(f) }
+        else { self = .extra }
+    }
+
+    var fundId: Int64? { if case .fund(let id) = self { return id } else { return nil } }
+    var consumableId: Int64? { if case .consumable(let id) = self { return id } else { return nil } }
+    var fromConsumables: Bool {
+        switch self {
+        case .consumables, .consumable: true
+        default: false
+        }
+    }
+}
+
+/// Selector de origen: saldo extra, apartado de consumibles, un ítem de consumible o un fondo.
+struct SourcePicker: View {
+    var title = "Sale de"
+    @Binding var source: MoneySource
+    /// Ítem ya ligado (para seguir mostrándolo aunque esté pagado).
+    var currentConsumableId: Int64?
+    @Environment(AppModel.self) private var model
+
+    private var items: [Consumable] {
+        model.consumables().filter { !$0.isPaid || $0.id == currentConsumableId }
+    }
+
+    var body: some View {
+        Picker(title, selection: $source) {
+            Text("Saldo extra del mes").tag(MoneySource.extra)
+            Section("Consumibles de \(model.month.monthName)") {
+                Text("Apartado de consumibles").tag(MoneySource.consumables)
+                ForEach(items) { c in
+                    Text("\(c.name) · \(MoneyFormat.cop(c.amount))").tag(MoneySource.consumable(c.id!))
+                }
+            }
+            Section("Fondos") {
+                ForEach(model.activeFunds) { f in
+                    Text(f.name).tag(MoneySource.fund(f.id!))
+                }
+            }
+        }
+    }
+}
+
+/// Fila informativa según el origen elegido.
+struct SourceBalanceRow: View {
+    var source: MoneySource
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        switch source {
+        case .extra:
+            MoneyRow(title: "Restante del saldo extra", amount: model.summary.remaining)
+        case .consumables:
+            MoneyRow(title: "Queda del apartado de consumibles", amount: model.summary.consumablesPending)
+        case .consumable:
+            MoneyRow(title: "Queda del apartado de consumibles", amount: model.summary.consumablesPending,
+                     subtitle: "El ítem quedará marcado como pagado")
+        case .fund(let id):
+            MoneyRow(title: "Saldo del fondo", amount: model.snapshot.balance(of: id, asOf: model.today))
+        }
+    }
+}
+
 struct EmptyHint: View {
     var text: String
     var body: some View {
