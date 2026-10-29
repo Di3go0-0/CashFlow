@@ -190,7 +190,9 @@ struct CardDetailView: View {
 }
 
 struct CardExpenseRow: View {
+    @Environment(AppModel.self) private var model
     var status: CardExpenseStatus
+    var showAllocations = false
 
     var body: some View {
         let e = status.expense
@@ -209,6 +211,12 @@ struct CardExpenseRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                if showAllocations, !status.allocations.isEmpty {
+                    Text(status.allocations.map { "\(model.snapshot.allocationSourceName($0)) \(MoneyFormat.cop($0.amount))" }.joined(separator: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
             Spacer()
             VStack(alignment: .trailing) {

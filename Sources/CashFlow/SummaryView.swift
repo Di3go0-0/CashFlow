@@ -5,7 +5,6 @@ import CashFlowCore
 struct SummaryView: View {
     @Environment(AppModel.self) private var model
     @State private var showExpense = false
-    @State private var showCardExpense = false
     @State private var showSettings = false
 
     var body: some View {
@@ -86,16 +85,10 @@ struct SummaryView: View {
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button { showExpense = true } label: { Label("Gasto sin tarjeta", systemImage: "cart") }
-                    Button { showCardExpense = true } label: { Label("Gasto con tarjeta", systemImage: "creditcard") }
-                } label: {
-                    Image(systemName: "plus")
-                }
+                Button { showExpense = true } label: { Image(systemName: "plus") }
             }
         }
-        .sheet(isPresented: $showExpense) { ExpenseEditView(expense: nil) }
-        .sheet(isPresented: $showCardExpense) { CardExpenseEditView(expense: nil, defaultCardId: nil) }
+        .sheet(isPresented: $showExpense) { NewExpenseSheet(initialCardId: nil) }
         .sheet(isPresented: $showSettings) { NavigationStack { SettingsView() } }
     }
 }

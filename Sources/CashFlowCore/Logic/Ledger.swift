@@ -219,6 +219,12 @@ public extension Snapshot {
 public struct CardExpenseStatus: Hashable, Sendable, Identifiable {
     public var expense: CardExpense
     public var allocations: [CardAllocation]
+
+    public init(expense: CardExpense, allocations: [CardAllocation]) {
+        self.expense = expense
+        self.allocations = allocations
+    }
+
     public var id: Int64? { expense.id }
     public var allocated: Int64 { allocations.reduce(0) { $0 + $1.amount } }
     /// Lo que falta amortiguar: pasar a un bolsillo para poder pagarlo.

@@ -3,42 +3,68 @@ import SwiftUI
 import GRDB
 import CashFlowCore
 
+/// Qué se muestra en la pestaña Gastos.
+enum ExpenseFilter: Hashable {
+    case all
+    case noCard
+    case card(Int64)
+}
+
 struct ExpensesView: View {
     @Environment(AppModel.self) private var model
+    @State private var filter: ExpenseFilter = .all
     @State private var editing: Expense?
+    @State private var editingCard: CardExpense?
     @State private var showNew = false
 
     private var monthExpenses: [Expense] {
         model.snapshot.expenses.filter { model.month.contains($0.date) }
     }
 
+    private func monthCardExpenses(_ cardId: Int64) -> [CardExpenseStatus] {
+        let allocByExpense = Dictionary(grouping: model.snapshot.allocations, by: \.cardExpenseId)
+        return model.snapshot.cardExpenses
+            .filter { $0.cardId == cardId && model.month.contains($0.date) }
+            .map { CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? []) }
+    }
+
+    private var visibleCards: [Card] {
+        switch filter {
+        case .all: model.activeCards
+        case .noCard: []
+        case .card(let id): model.activeCards.filter { $0.id == id }
+        }
+    }
+
+    private var showsNoCard: Bool { filter == .all || filter == .noCard }
+
     var body: some View {
         @Bindable var model = model
         List {
             Section {
                 MonthSwitcher(month: $model.month)
-            }
-            let items = monthExpenses
-            let grouped = Dictionary(grouping: items, by: \.date).sorted { $0.key > $1.key }
-            if items.isEmpty {
-                Section {
-                    EmptyHint(text: "Gastos por transferencia o efectivo. Los de tarjeta van en la pestaña Tarjetas.")
-                }
-            }
-            ForEach(grouped, id: \.key) { date, dayItems in
-                Section(date.longDisplay) {
-                    ForEach(dayItems) { e in
-                        Button { editing = e } label: { ExpenseRow(expense: e) }.tint(.primary)
-                    }
-                    .onDelete { idx in
-                        let ids = idx.map { dayItems[$0].id! }
-                        model.write { db in try Expense.deleteAll(db, ids: ids) }
+                Picker("Ver", selection: $filter) {
+                    Text("Todo").tag(ExpenseFilter.all)
+                    Text("Sin tarjeta").tag(ExpenseFilter.noCard)
+                    ForEach(model.activeCards) { c in
+                        Text(c.name).tag(ExpenseFilter.card(c.id!))
                     }
                 }
             }
-            if !items.isEmpty {
+
+            if showsNoCard {
+                noCardSection
+            }
+
+            ForEach(visibleCards) { card in
+                cardSection(card)
+            }
+
+            if filter == .all {
+                let total = monthExpenses.reduce(0) { $0 + $1.amountCOP }
+                    + model.activeCards.flatMap { monthCardExpenses($0.id!) }.reduce(0) { $0 + $1.expense.amountCOP }
                 Section {
-                    MoneyRow(title: "Total del mes", amount: items.reduce(0) { $0 + $1.amountCOP }, emphasis: true)
+                    MoneyRow(title: "Total gastado en \(model.month.monthName)", amount: total, emphasis: true)
                 }
             }
         }
@@ -48,8 +74,55 @@ struct ExpensesView: View {
                 Button { showNew = true } label: { Image(systemName: "plus") }
             }
         }
-        .sheet(isPresented: $showNew) { ExpenseEditView(expense: nil) }
+        .sheet(isPresented: $showNew) {
+            NewExpenseSheet(initialCardId: { if case .card(let id) = filter { return id } else { return nil } }())
+        }
         .sheet(item: $editing) { ExpenseEditView(expense: $0) }
+        .sheet(item: $editingCard) { CardExpenseEditView(expense: $0, defaultCardId: $0.cardId) }
+    }
+
+    private var noCardSection: some View {
+        Section {
+            let items = monthExpenses
+            if items.isEmpty {
+                EmptyHint(text: "Transferencias y efectivo de este mes.")
+            }
+            ForEach(items) { e in
+                Button { editing = e } label: { ExpenseRow(expense: e) }.tint(.primary)
+            }
+            .onDelete { idx in
+                let ids = idx.map { items[$0].id! }
+                model.write { db in try Expense.deleteAll(db, ids: ids) }
+            }
+        } header: {
+            HStack {
+                Text("Sin tarjeta")
+                Spacer()
+                Text(MoneyFormat.cop(monthExpenses.reduce(0) { $0 + $1.amountCOP }))
+            }
+        }
+    }
+
+    private func cardSection(_ card: Card) -> some View {
+        Section {
+            let items = monthCardExpenses(card.id!)
+            if items.isEmpty {
+                EmptyHint(text: "Sin gastos con \(card.name) este mes.")
+            }
+            ForEach(items) { s in
+                Button { editingCard = s.expense } label: { CardExpenseRow(status: s, showAllocations: true) }.tint(.primary)
+            }
+            .onDelete { idx in
+                let ids = idx.map { items[$0].expense.id! }
+                model.write { db in try CardExpense.deleteAll(db, ids: ids) }
+            }
+        } header: {
+            HStack {
+                Label(card.name, systemImage: "creditcard")
+                Spacer()
+                Text(MoneyFormat.cop(monthCardExpenses(card.id!).reduce(0) { $0 + $1.expense.amountCOP }))
+            }
+        }
     }
 }
 
@@ -59,9 +132,9 @@ struct ExpenseRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(expense.reason.isEmpty ? "Sin descripción" : expense.reason)
-                Text(model.fundName(expense.fundId)).font(.caption).foregroundStyle(.secondary)
+                Text("\(expense.date.shortDisplay) · \(model.fundName(expense.fundId))").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             VStack(alignment: .trailing) {
@@ -71,6 +144,31 @@ struct ExpenseRow: View {
                 }
             }
         }
+    }
+}
+
+/// Gasto nuevo: sin tarjeta o con una tarjeta concreta.
+struct NewExpenseSheet: View {
+    @Environment(AppModel.self) private var model
+    var initialCardId: Int64?
+    @State private var withCard = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("Medio de pago", selection: $withCard) {
+                Text("Transferencia o efectivo").tag(false)
+                Text("Tarjeta de crédito").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .padding()
+            .background(.bar)
+            if withCard {
+                CardExpenseEditView(expense: nil, defaultCardId: initialCardId)
+            } else {
+                ExpenseEditView(expense: nil)
+            }
+        }
+        .onAppear { withCard = initialCardId != nil }
     }
 }
 
