@@ -107,6 +107,24 @@ public struct FundMovement: Hashable, Sendable, Identifiable {
     public var amount: Int64
     /// Id del registro de origen, para poder borrarlo desde la lista.
     public var sourceId: Int64
+    /// Con quién se cruzó la plata: otro fondo, una tarjeta, el saldo extra… Nil si es el mundo exterior.
+    public var counterparty: String?
+}
+
+/// Una línea del flujo de un fondo: cuánto entró desde, o salió hacia, una contraparte.
+public struct FundFlowLine: Hashable, Sendable, Identifiable {
+    public var kind: FundMovementKind
+    public var counterparty: String?
+    public var amount: Int64
+    public var count: Int
+    public var id: String { "\(kind.rawValue)|\(counterparty ?? "")" }
+}
+
+public struct FundFlow: Hashable, Sendable {
+    public var inflows: [FundFlowLine]
+    public var outflows: [FundFlowLine]
+    public var totalIn: Int64 { inflows.reduce(0) { $0 + $1.amount } }
+    public var totalOut: Int64 { outflows.reduce(0) { $0 + $1.amount } }
 }
 
 public extension Snapshot {
@@ -114,30 +132,55 @@ public extension Snapshot {
     func movements(of fundId: Int64) -> [FundMovement] {
         var out: [FundMovement] = []
         for c in contributions where c.fundId == fundId {
-            out.append(.init(id: "c\(c.id!)", date: c.date, kind: .contribution, title: L10n.tr("Contribution"), amount: c.amount, sourceId: c.id!))
+            out.append(.init(id: "c\(c.id!)", date: c.date, kind: .contribution, title: L10n.tr("Contribution"), amount: c.amount, sourceId: c.id!, counterparty: nil))
         }
         for e in expenses where e.fundId == fundId {
-            out.append(.init(id: "e\(e.id!)", date: e.date, kind: .expense, title: e.reason, amount: -e.amountCOP, sourceId: e.id!))
+            out.append(.init(id: "e\(e.id!)", date: e.date, kind: .expense, title: e.reason, amount: -e.amountCOP, sourceId: e.id!, counterparty: nil))
         }
         let expenseById = Dictionary(uniqueKeysWithValues: cardExpenses.map { ($0.id!, $0) })
         for a in allocations where a.fundId == fundId {
             let reason = expenseById[a.cardExpenseId]?.reason ?? ""
-            out.append(.init(id: "ao\(a.id!)", date: a.date, kind: .allocationOut, title: L10n.tr("Top-up: %@", reason), amount: -a.amount, sourceId: a.id!))
+            let cardName = expenseById[a.cardExpenseId].flatMap { card($0.cardId)?.name }
+            out.append(.init(id: "ao\(a.id!)", date: a.date, kind: .allocationOut, title: L10n.tr("Top-up: %@", reason), amount: -a.amount, sourceId: a.id!, counterparty: cardName))
         }
         if let pocket = fund(fundId), let cardId = pocket.cardId {
             for a in allocations {
                 guard let ce = expenseById[a.cardExpenseId], ce.cardId == cardId else { continue }
-                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: L10n.tr("Top-up from %@: %@", allocationSourceName(a), ce.reason), amount: a.amount, sourceId: a.id!))
+                out.append(.init(id: "ai\(a.id!)", date: a.date, kind: .allocationIn, title: L10n.tr("Top-up from %@: %@", allocationSourceName(a), ce.reason), amount: a.amount, sourceId: a.id!, counterparty: allocationSourceName(a)))
             }
             for p in payments where p.cardId == cardId {
-                out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: L10n.tr("Card payment"), amount: -p.amount, sourceId: p.id!))
+                out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: L10n.tr("Card payment"), amount: -p.amount, sourceId: p.id!, counterparty: card(cardId)?.name))
             }
         }
         for a in adjustments where a.fundId == fundId {
             let title = a.reason.isEmpty ? L10n.tr(a.amount >= 0 ? "Manual deposit" : "Manual withdrawal") : a.reason
-            out.append(.init(id: "j\(a.id!)", date: a.date, kind: .adjustment, title: title, amount: a.amount, sourceId: a.id!))
+            let other = a.pairId.flatMap { pid in adjustments.first { $0.pairId == pid && $0.id != a.id } }.flatMap { fund($0.fundId)?.name }
+            out.append(.init(id: "j\(a.id!)", date: a.date, kind: .adjustment, title: title, amount: a.amount, sourceId: a.id!, counterparty: other))
         }
         return out.sorted { ($0.date, $0.id) > ($1.date, $1.id) }
+    }
+
+    /// Flujo de un fondo agrupado por tipo y contraparte. Con `month` solo ese mes; sin él, todo el histórico hasta `asOf`.
+    func fundFlow(of fundId: Int64, month: YearMonth?, asOf: DayDate) -> FundFlow {
+        let ms = movements(of: fundId).filter { m in
+            if let month { return month.contains(m.date) }
+            return m.date <= asOf
+        }
+        func group(_ items: [FundMovement]) -> [FundFlowLine] {
+            var dict: [String: FundFlowLine] = [:]
+            for m in items {
+                let key = "\(m.kind.rawValue)|\(m.counterparty ?? "")"
+                if var line = dict[key] {
+                    line.amount += Swift.abs(m.amount)
+                    line.count += 1
+                    dict[key] = line
+                } else {
+                    dict[key] = FundFlowLine(kind: m.kind, counterparty: m.counterparty, amount: Swift.abs(m.amount), count: 1)
+                }
+            }
+            return dict.values.sorted { $0.amount > $1.amount }
+        }
+        return FundFlow(inflows: group(ms.filter { $0.amount > 0 }), outflows: group(ms.filter { $0.amount < 0 }))
     }
 
     func balance(of fundId: Int64, asOf: DayDate) -> Int64 {

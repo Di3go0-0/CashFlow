@@ -32,6 +32,8 @@ struct RootView: View {
                 .tabItem { Label(T("Expenses"), systemImage: "cart") }
         }
         .id(model.language)
+        .tint(Theme.accent)
+        .fontDesign(.rounded)
         .alert(T("Something went wrong"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }

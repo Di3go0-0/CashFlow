@@ -245,6 +245,47 @@ extension Int64 {
     }
 }
 
+enum Theme {
+    static let accent = Color(hex: 0x0d9488)
+    static let heroGradient = LinearGradient(colors: [Color(hex: 0x0f766e), Color(hex: 0x134e4a)], startPoint: .topLeading, endPoint: .bottomTrailing)
+}
+
+/// Punto de color estable por posición, para identificar fondos y tarjetas de un vistazo.
+struct ColorDot: View {
+    var index: Int
+    var systemImage: String?
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let color = Palette.series(scheme)[index % 5]
+        ZStack {
+            Circle().fill(color.opacity(0.18))
+            if let systemImage {
+                Image(systemName: systemImage).font(.caption).foregroundStyle(color)
+            } else {
+                Circle().fill(color).frame(width: 10, height: 10)
+            }
+        }
+        .frame(width: 28, height: 28)
+    }
+}
+
+/// Barra fina de progreso con esquinas redondeadas.
+struct ThinBar: View {
+    var fraction: Double
+    var color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.15))
+                Capsule().fill(color).frame(width: max(0, min(1, fraction)) * geo.size.width)
+            }
+        }
+        .frame(height: 5)
+    }
+}
+
 /// Paleta categórica validada (orden fijo) con pasos para modo oscuro.
 enum Palette {
     static func series(_ scheme: ColorScheme) -> [Color] {

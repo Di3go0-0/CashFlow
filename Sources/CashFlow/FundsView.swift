@@ -15,9 +15,9 @@ struct FundsView: View {
                 if regular.isEmpty {
                     EmptyHint(text: T("A fund is a pocket with a purpose. Some accumulate, others are spent within the month."))
                 }
-                ForEach(regular) { r in
+                ForEach(Array(regular.enumerated()), id: \.element.id) { i, r in
                     NavigationLink(value: r.fund.id!) {
-                        FundRow(report: r)
+                        FundRow(report: r, index: i)
                     }
                 }
             } header: {
@@ -29,9 +29,9 @@ struct FundsView: View {
             }
             if !pockets.isEmpty {
                 Section(T("Credit card payment pockets")) {
-                    ForEach(pockets) { r in
+                    ForEach(Array(pockets.enumerated()), id: \.element.id) { i, r in
                         NavigationLink(value: r.fund.id!) {
-                            FundRow(report: r)
+                            FundRow(report: r, index: i, systemImage: "creditcard")
                         }
                     }
                 }
@@ -50,17 +50,22 @@ struct FundsView: View {
 
 struct FundRow: View {
     var report: FundReport
+    var index: Int = 0
+    var systemImage: String?
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+        HStack(spacing: 12) {
+            ColorDot(index: index, systemImage: systemImage ?? (report.fund.isSavings ? "leaf.fill" : nil))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
                     Text(report.fund.name)
-                    if report.fund.isSavings {
-                        Image(systemName: "leaf.fill").font(.caption2).foregroundStyle(.green)
-                    }
+                    Spacer()
+                    MoneyText(amount: report.balance).foregroundStyle(report.balance.balanceColor)
                 }
                 if report.fund.resetsMonthly {
+                    ThinBar(fraction: report.contributedInMonth > 0 ? Double(report.remainingInMonth) / Double(report.contributedInMonth) : 0,
+                            color: Palette.series(scheme)[index % 5])
                     Text(T("This month: %@ of %@", MoneyFormat.cop(report.remainingInMonth), MoneyFormat.cop(report.contributedInMonth)))
                         .font(.caption).foregroundStyle(.secondary)
                 } else if report.contributedInMonth > 0 {
@@ -68,9 +73,8 @@ struct FundRow: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Spacer()
-            MoneyText(amount: report.balance).foregroundStyle(report.balance.balanceColor)
         }
+        .padding(.vertical, 2)
     }
 }
 
@@ -79,6 +83,7 @@ struct FundDetailView: View {
     var fundId: Int64
     @State private var editing = false
     @State private var adjusting = false
+    @State private var flowAllTime = false
 
     private var report: FundReport? {
         model.snapshot.fundReports(asOf: model.today, month: model.month, includeArchived: true).first { $0.fund.id == fundId }
@@ -97,6 +102,20 @@ struct FundDetailView: View {
                     if r.fund.initialBalance != 0 {
                         MoneyRow(title: T("Initial balance"), amount: r.fund.initialBalance)
                     }
+                }
+                Section {
+                    Picker(T("Flow"), selection: $flowAllTime) {
+                        Text(model.month.monthName).tag(false)
+                        Text(T("All time")).tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    let flow = model.snapshot.fundFlow(of: fundId, month: flowAllTime ? nil : model.month, asOf: model.today)
+                    FlowGroup(title: T("In"), lines: flow.inflows, total: flow.totalIn, incoming: true)
+                    FlowGroup(title: T("Out"), lines: flow.outflows, total: flow.totalOut, incoming: false)
+                } header: {
+                    Text(T("Flow"))
+                } footer: {
+                    Text(T("Where the money came from and where it went."))
                 }
                 Section(T("Movements")) {
                     let moves = model.snapshot.movements(of: fundId)
@@ -139,6 +158,64 @@ struct FundDetailView: View {
             .sheet(isPresented: $adjusting) { FundAdjustmentView(fund: r.fund) }
         } else {
             ContentUnavailableView(T("Fund not found"), systemImage: "tray")
+        }
+    }
+}
+
+/// Entradas o salidas de un fondo agrupadas por contraparte, con barra proporcional.
+struct FlowGroup: View {
+    var title: String
+    var lines: [FundFlowLine]
+    var total: Int64
+    var incoming: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                MoneyText(amount: total, showSign: true).font(.caption.weight(.semibold)).foregroundStyle(incoming ? .green : .primary)
+            }
+            if lines.isEmpty {
+                Text(T("Nothing")).font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(lines) { line in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Image(systemName: icon(line.kind)).font(.caption).foregroundStyle(incoming ? .green : .secondary).frame(width: 16)
+                        Text(label(line)).font(.subheadline)
+                        Text(T("%d movements", line.count)).font(.caption2).foregroundStyle(.secondary)
+                        Spacer()
+                        MoneyText(amount: line.amount).font(.subheadline).monospacedDigit()
+                    }
+                    ThinBar(fraction: total > 0 ? Double(line.amount) / Double(total) : 0, color: incoming ? .green : Theme.accent)
+                        .padding(.leading, 22)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func icon(_ kind: FundMovementKind) -> String {
+        switch kind {
+        case .contribution: "arrow.down.to.line"
+        case .expense: "cart"
+        case .allocationOut, .allocationIn: "creditcard"
+        case .cardPayment: "banknote"
+        case .adjustment: "arrow.left.arrow.right"
+        }
+    }
+
+    private func label(_ line: FundFlowLine) -> String {
+        switch line.kind {
+        case .contribution: T("Contributions")
+        case .expense: T("Expenses")
+        case .allocationOut: T("Top-ups to %@", line.counterparty ?? "")
+        case .allocationIn: T("Top-ups from %@", line.counterparty ?? "")
+        case .cardPayment: T("Card payments")
+        case .adjustment:
+            if let c = line.counterparty { incoming ? T("Transfers from %@", c) : T("Transfers to %@", c) }
+            else { incoming ? T("Deposits") : T("Withdrawals") }
         }
     }
 }

@@ -14,7 +14,9 @@ struct SummaryView: View {
         let s = model.summary
         List {
             Section {
-                MonthSwitcher(month: $model.month)
+                HeroCard(month: $model.month, summary: s)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             }
 
             if model.projection == nil && !model.isCurrentMonth {
@@ -70,23 +72,8 @@ struct SummaryView: View {
                         .frame(height: CGFloat(reports.count) * 30 + 20)
                         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 }
-                ForEach(reports) { r in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            HStack(spacing: 4) {
-                                Text(r.fund.name)
-                                if r.fund.isSavings {
-                                    Image(systemName: "leaf.fill").font(.caption2).foregroundStyle(.green)
-                                }
-                            }
-                            if r.fund.resetsMonthly {
-                                Text(T("Contributed %@ · spent %@", MoneyFormat.cop(r.contributedInMonth), MoneyFormat.cop(r.spentInMonth)))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        MoneyText(amount: r.balance).foregroundStyle(r.balance.balanceColor)
-                    }
+                ForEach(Array(reports.enumerated()), id: \.element.id) { i, r in
+                    FundRow(report: r, index: i)
                 }
             }
 
@@ -242,17 +229,63 @@ struct FundBalancesChart: View {
     }
 }
 
+/// Cabecera del Resumen: mes, restante grande y tres cifras clave.
+struct HeroCard: View {
+    @Binding var month: YearMonth
+    var summary: MonthSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Button { month = month.previous } label: { Image(systemName: "chevron.left") }
+                Spacer()
+                Text(month.displayName).font(.subheadline.weight(.semibold))
+                Spacer()
+                Button { month = month.next } label: { Image(systemName: "chevron.right") }
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.white.opacity(0.9))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(T("Remaining this month")).font(.caption).foregroundStyle(.white.opacity(0.75))
+                Text(MoneyFormat.cop(summary.remaining))
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(summary.remaining < 0 ? Color(hex: 0xfecaca) : .white)
+            }
+            HStack(spacing: 0) {
+                heroStat(T("Income"), summary.income)
+                heroStat(T("Spent"), summary.spent)
+                heroStat(T("Saved"), summary.saved)
+            }
+        }
+        .padding(18)
+        .background(Theme.heroGradient, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.horizontal, 4)
+    }
+
+    private func heroStat(_ title: String, _ amount: Int64) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption2).foregroundStyle(.white.opacity(0.7))
+            Text(compactCOP(amount)).font(.subheadline.weight(.semibold)).foregroundStyle(.white).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct CardSummaryRow: View {
     var status: CardStatus
     var today: DayDate
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
+                ColorDot(index: Int(status.card.id ?? 0), systemImage: "creditcard")
                 Text(status.card.name).font(.headline)
                 Spacer()
                 MoneyText(amount: status.debt).foregroundStyle(status.debt > 0 ? .primary : .secondary)
             }
+            ThinBar(fraction: status.card.creditLimit > 0 ? Double(status.card.creditLimit - status.available) / Double(status.card.creditLimit) : 0,
+                    color: Theme.accent)
             let cut = today.days(until: status.cycle.end)
             HStack {
                 Text(T("Closes in %d d · %@", cut, status.cycle.end.shortDisplay))

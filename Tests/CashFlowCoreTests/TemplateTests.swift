@@ -290,4 +290,26 @@ import GRDB
         #expect(d.shortDisplay(in: .es) == "5 nov" && d.longDisplay(in: .es) == "5 de noviembre de 2026")
         #expect(d.longDisplay(in: .fr) == "5 novembre 2026")
     }
+
+    @Test func fundFlowGroupsByCounterparty() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov, fromTemplates: true)
+        let d = DayDate(year: 2026, month: 11, day: 8)
+        try f.db.adjustFund(f.moto.id!, amount: -50_000, date: d, reason: "", counterpartFundId: f.compras.id!)
+        try f.db.saveExpense(Expense(date: d, amount: 20_000, currency: .cop, reason: "Nails", fundId: f.compras.id))
+        let e = try f.db.write { db -> CardExpense in
+            var e = CardExpense(cardId: f.unica.id!, date: d, amount: 30_000, currency: .cop, reason: "Market")
+            try e.insert(db)
+            return e
+        }
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: e.id!, fundId: f.compras.id, amount: 30_000, date: d))
+        let flow = try f.db.snapshot().fundFlow(of: f.compras.id!, month: f.nov, asOf: d)
+        #expect(flow.totalIn == 300_000 + 50_000)
+        #expect(flow.inflows.first { $0.kind == .adjustment }?.counterparty == f.moto.name)
+        #expect(flow.totalOut == 50_000)
+        #expect(flow.outflows.first { $0.kind == .allocationOut }?.counterparty == f.unica.name)
+        #expect(flow.outflows.first { $0.kind == .expense }?.amount == 20_000)
+        let pocketFlow = try f.db.snapshot().fundFlow(of: f.db.snapshot().pocket(of: f.unica.id!)!.id!, month: f.nov, asOf: d)
+        #expect(pocketFlow.inflows.first?.counterparty == f.compras.name)
+    }
 }
