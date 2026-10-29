@@ -28,11 +28,11 @@ public final class AppDatabase: Sendable {
         return try AppDatabase(queue)
     }
 
-    public func read<T: Sendable>(_ block: @Sendable (Database) throws -> T) throws -> T {
+    public func read<T>(_ block: (Database) throws -> T) throws -> T {
         try reader.read(block)
     }
 
-    public func write<T: Sendable>(_ block: @Sendable (Database) throws -> T) throws -> T {
+    public func write<T>(_ block: (Database) throws -> T) throws -> T {
         try writer.write(block)
     }
 

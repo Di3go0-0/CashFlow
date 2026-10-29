@@ -137,6 +137,15 @@ public struct DayDate: Hashable, Comparable, Sendable, CustomStringConvertible {
         return DayDate(d, calendar: cal)
     }
 
+    /// Días desde esta fecha hasta `other`. Negativo si `other` es anterior.
+    public func days(until other: DayDate) -> Int {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let a = cal.startOfDay(for: date(calendar: cal))
+        let b = cal.startOfDay(for: other.date(calendar: cal))
+        return cal.dateComponents([.day], from: a, to: b).day ?? 0
+    }
+
     /// Mismo día de otro mes, recortado si ese mes es más corto.
     public static func clamped(year: Int, month: Int, day: Int) -> DayDate {
         let ym = YearMonth(year: year, month: month)

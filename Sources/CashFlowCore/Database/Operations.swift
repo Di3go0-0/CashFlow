@@ -116,3 +116,50 @@ public extension AppDatabase {
         }
     }
 }
+
+public extension AppDatabase {
+    /// Copia aportes y compromisos de la proyección de un mes a otro, reemplazando los del destino.
+    func copyProjection(from source: YearMonth, to target: YearMonth) throws {
+        try write { db in
+            guard let src = try Projection.filter(Column("month") == source).fetchOne(db) else { return }
+            var dst: Projection
+            if let existing = try Projection.filter(Column("month") == target).fetchOne(db) {
+                dst = existing
+            } else {
+                dst = Projection(month: target)
+                try dst.insert(db)
+            }
+            try Contribution.filter(Column("projectionId") == dst.id!).deleteAll(db)
+            try Commitment.filter(Column("projectionId") == dst.id!).deleteAll(db)
+            for c in try Contribution.filter(Column("projectionId") == src.id!).fetchAll(db) {
+                var copy = Contribution(projectionId: dst.id!, fundId: c.fundId, amount: c.amount, date: target.firstDay)
+                try copy.insert(db)
+            }
+            for c in try Commitment.filter(Column("projectionId") == src.id!).fetchAll(db) {
+                // Las cuotas se recalculan según el plan; lo demás se copia tal cual.
+                if let planId = c.installmentPlanId {
+                    guard let plan = try InstallmentPlan.fetchOne(db, id: planId), let n = plan.installmentNumber(in: target) else { continue }
+                    var copy = Commitment(projectionId: dst.id!, kind: .debt, name: "\(plan.name) (\(n)/\(plan.installmentCount))",
+                                          amount: plan.monthlyAmount, date: target.firstDay, installmentPlanId: planId)
+                    try copy.insert(db)
+                } else {
+                    var copy = Commitment(projectionId: dst.id!, kind: c.kind, name: c.name, amount: c.amount, date: target.firstDay)
+                    try copy.insert(db)
+                }
+            }
+        }
+    }
+
+    /// Registra un pago de tarjeta y, si se pide, marca como pagados los gastos pendientes hasta una fecha.
+    func payCard(_ payment: CardPayment, markPaidThrough: DayDate?) throws {
+        try write { db in
+            var p = payment
+            try p.insert(db)
+            if let through = markPaidThrough {
+                try CardExpense
+                    .filter(Column("cardId") == payment.cardId && Column("isPaid") == false && Column("date") <= through)
+                    .updateAll(db, Column("isPaid").set(to: true))
+            }
+        }
+    }
+}

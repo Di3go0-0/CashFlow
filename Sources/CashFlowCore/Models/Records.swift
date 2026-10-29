@@ -345,6 +345,12 @@ public struct Expense: Codable, Identifiable, Hashable, Sendable, FetchableRecor
         self.note = note
     }
 
+    /// Recalcula `amountCOP` y limpia la tasa si la moneda es COP. Llamar antes de guardar tras editar.
+    public mutating func recomputeCOP() {
+        if currency == .cop { rate = nil }
+        amountCOP = Exchange.toCOP(amountMinor: amount, currency: currency, rate: rate)
+    }
+
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 
@@ -375,6 +381,11 @@ public struct CardExpense: Codable, Identifiable, Hashable, Sendable, FetchableR
         self.reason = reason
         self.isPaid = isPaid
         self.note = note
+    }
+
+    public mutating func recomputeCOP() {
+        if currency == .cop { rate = nil }
+        amountCOP = Exchange.toCOP(amountMinor: amount, currency: currency, rate: rate)
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
