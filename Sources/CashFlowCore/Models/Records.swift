@@ -351,6 +351,29 @@ public enum CommitmentKind: String, Codable, Sendable, DatabaseValueConvertible 
     case necessary
 }
 
+/// Plantilla de un compromiso recurrente (ayuda familiar, una deuda fija).
+public struct CommitmentTemplate: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "commitmentTemplate"
+
+    public var id: Int64?
+    public var kind: CommitmentKind
+    public var name: String
+    public var amount: Int64
+    public var sortOrder: Int
+    public var isArchived: Bool
+
+    public init(id: Int64? = nil, kind: CommitmentKind, name: String, amount: Int64, sortOrder: Int = 0, isArchived: Bool = false) {
+        self.id = id
+        self.kind = kind
+        self.name = name
+        self.amount = amount
+        self.sortOrder = sortOrder
+        self.isArchived = isArchived
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
 /// Compromiso del mes que sale directo del ingreso: deudas y gastos necesarios.
 public struct Commitment: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "commitment"
@@ -362,9 +385,10 @@ public struct Commitment: Codable, Identifiable, Hashable, Sendable, FetchableRe
     public var amount: Int64
     public var date: DayDate
     public var installmentPlanId: Int64?
+    public var templateId: Int64?
 
     public init(id: Int64? = nil, projectionId: Int64, kind: CommitmentKind, name: String, amount: Int64,
-                date: DayDate, installmentPlanId: Int64? = nil) {
+                date: DayDate, installmentPlanId: Int64? = nil, templateId: Int64? = nil) {
         self.id = id
         self.projectionId = projectionId
         self.kind = kind
@@ -372,6 +396,7 @@ public struct Commitment: Codable, Identifiable, Hashable, Sendable, FetchableRe
         self.amount = amount
         self.date = date
         self.installmentPlanId = installmentPlanId
+        self.templateId = templateId
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }

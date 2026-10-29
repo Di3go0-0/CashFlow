@@ -220,7 +220,7 @@ struct MonthView: View {
             }
             .onDelete { idx in
                 let ids = idx.map { items[$0].id! }
-                model.write { db in try Commitment.deleteAll(db, ids: ids) }
+                model.perform { try model.db.deleteCommitments(ids: ids, asTemplate: model.editsTemplate) }
             }
             Button {
                 editingCommitment = Commitment(projectionId: p.id!, kind: kind, name: "", amount: 0, date: model.defaultDate)
@@ -500,7 +500,8 @@ struct CommitmentEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
                         let c = commitment
-                        if model.write({ db in var c = c; try c.save(db) }) { dismiss() }
+                        let asTemplate = model.editsTemplate
+                        if model.perform({ try model.db.saveCommitment(c, asTemplate: asTemplate) }) { dismiss() }
                     }
                     .disabled(commitment.name.trimmingCharacters(in: .whitespaces).isEmpty || commitment.amount <= 0)
                 }

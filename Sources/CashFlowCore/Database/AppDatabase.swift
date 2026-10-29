@@ -241,6 +241,30 @@ public final class AppDatabase: Sendable {
             }
             try db.execute(sql: "UPDATE cardAllocation SET fromConsumables = 1 WHERE consumableId IS NOT NULL")
         }
+        m.registerMigration("v5") { db in
+            try db.create(table: "commitmentTemplate") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("kind", .text).notNull()
+                t.column("name", .text).notNull()
+                t.column("amount", .integer).notNull()
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+                t.column("isArchived", .boolean).notNull().defaults(to: false)
+            }
+            try db.alter(table: "commitment") { t in
+                t.add(column: "templateId", .integer).indexed().references("commitmentTemplate", onDelete: .setNull)
+            }
+            // Sembrar plantillas con los compromisos del mes en curso que no vengan de una compra a cuotas.
+            if let current = try Projection.filter(Column("month") == YearMonth.current()).fetchOne(db) {
+                let items = try Commitment.filter(Column("projectionId") == current.id! && Column("installmentPlanId") == nil)
+                    .order(Column("id")).fetchAll(db)
+                for (i, var c) in items.enumerated() {
+                    var t = CommitmentTemplate(kind: c.kind, name: c.name, amount: c.amount, sortOrder: i)
+                    try t.insert(db)
+                    c.templateId = t.id
+                    try c.update(db)
+                }
+            }
+        }
         return m
     }
 }

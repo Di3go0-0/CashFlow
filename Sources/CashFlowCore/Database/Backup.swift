@@ -20,6 +20,7 @@ public struct Backup: Codable, Sendable {
     public var projections: [Projection]
     public var contributions: [Contribution]
     public var commitments: [Commitment]
+    public var commitmentTemplates: [CommitmentTemplate] = []
     public var expenses: [Expense]
     public var cardExpenses: [CardExpense]
     public var allocations: [CardAllocation]
@@ -47,6 +48,7 @@ public extension AppDatabase {
                 projections: try Projection.fetchAll(db),
                 contributions: try Contribution.fetchAll(db),
                 commitments: try Commitment.fetchAll(db),
+                commitmentTemplates: try CommitmentTemplate.fetchAll(db),
                 expenses: try Expense.fetchAll(db),
                 cardExpenses: try CardExpense.fetchAll(db),
                 allocations: try CardAllocation.fetchAll(db),
@@ -72,6 +74,7 @@ public extension AppDatabase {
             try CardExpense.deleteAll(db)
             try Expense.deleteAll(db)
             try Commitment.deleteAll(db)
+            try CommitmentTemplate.deleteAll(db)
             try Contribution.deleteAll(db)
             try Projection.deleteAll(db)
             try InstallmentPlan.deleteAll(db)
@@ -95,6 +98,7 @@ public extension AppDatabase {
             for var r in b.funds { try r.insert(db) }
             for var r in b.adjustments { try r.insert(db) }
             for var r in b.plans { try r.insert(db) }
+            for var r in b.commitmentTemplates { try r.insert(db) }
             for var r in b.projections { try r.insert(db) }
             for var r in b.consumables { try r.insert(db) }
             for var r in b.contributions { try r.insert(db) }

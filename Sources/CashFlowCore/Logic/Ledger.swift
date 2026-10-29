@@ -17,6 +17,7 @@ public struct Snapshot: Sendable {
     public var projections: [Projection] = []
     public var contributions: [Contribution] = []
     public var commitments: [Commitment] = []
+    public var commitmentTemplates: [CommitmentTemplate] = []
     public var expenses: [Expense] = []
     public var cardExpenses: [CardExpense] = []
     public var allocations: [CardAllocation] = []
@@ -41,7 +42,8 @@ public struct Snapshot: Sendable {
         s.plans = try InstallmentPlan.fetchAll(db)
         s.projections = try Projection.fetchAll(db)
         s.contributions = try Contribution.fetchAll(db)
-        s.commitments = try Commitment.fetchAll(db)
+        s.commitments = try Commitment.order(Column("id")).fetchAll(db)
+        s.commitmentTemplates = try CommitmentTemplate.order(Column("sortOrder"), Column("id")).fetchAll(db)
         s.expenses = try Expense.order(Column("date").desc, Column("id").desc).fetchAll(db)
         s.cardExpenses = try CardExpense.order(Column("date").desc, Column("id").desc).fetchAll(db)
         s.allocations = try CardAllocation.fetchAll(db)

@@ -55,6 +55,11 @@ public extension AppDatabase {
                     var item = Consumable(projectionId: projection.id!, templateId: t.id, name: t.name, amount: t.amount, sortOrder: t.sortOrder)
                     try item.insert(db)
                 }
+                let commitmentTemplates = try CommitmentTemplate.filter(Column("isArchived") == false).order(Column("sortOrder")).fetchAll(db)
+                for t in commitmentTemplates {
+                    var cm = Commitment(projectionId: projection.id!, kind: t.kind, name: t.name, amount: t.amount, date: month.firstDay, templateId: t.id)
+                    try cm.insert(db)
+                }
             }
 
             let sources = try IncomeSource.filter(Column("isRecurring") == true && Column("isArchived") == false).fetchAll(db)
@@ -144,6 +149,44 @@ public extension AppDatabase {
                 if var fund = try Fund.fetchOne(db, id: fundId) {
                     fund.defaultContribution = 0
                     try fund.update(db)
+                }
+            }
+        }
+    }
+
+    // MARK: Compromisos (deudas y gastos necesarios)
+
+    /// Guarda un compromiso. Si `asTemplate` y no viene de una compra a cuotas, crea o actualiza su plantilla.
+    func saveCommitment(_ item: Commitment, asTemplate: Bool) throws {
+        try write { db in
+            var c = item
+            if asTemplate && c.installmentPlanId == nil {
+                if let tid = c.templateId, var t = try CommitmentTemplate.fetchOne(db, id: tid) {
+                    t.kind = c.kind
+                    t.name = c.name
+                    t.amount = c.amount
+                    t.isArchived = false
+                    try t.update(db)
+                } else {
+                    var t = CommitmentTemplate(kind: c.kind, name: c.name, amount: c.amount, sortOrder: try CommitmentTemplate.fetchCount(db))
+                    try t.insert(db)
+                    c.templateId = t.id
+                }
+            }
+            try c.save(db)
+        }
+    }
+
+    /// Borra compromisos. Si `asTemplate`, archiva sus plantillas.
+    func deleteCommitments(ids: [Int64], asTemplate: Bool) throws {
+        try write { db in
+            let items = try Commitment.filter(ids: ids).fetchAll(db)
+            try Commitment.deleteAll(db, ids: ids)
+            guard asTemplate else { return }
+            for tid in items.compactMap(\.templateId) {
+                if var t = try CommitmentTemplate.fetchOne(db, id: tid) {
+                    t.isArchived = true
+                    try t.update(db)
                 }
             }
         }
@@ -253,7 +296,7 @@ public extension AppDatabase {
                                           amount: plan.monthlyAmount, date: target.firstDay, installmentPlanId: planId)
                     try copy.insert(db)
                 } else {
-                    var copy = Commitment(projectionId: dst.id!, kind: c.kind, name: c.name, amount: c.amount, date: target.firstDay)
+                    var copy = Commitment(projectionId: dst.id!, kind: c.kind, name: c.name, amount: c.amount, date: target.firstDay, templateId: c.templateId)
                     try copy.insert(db)
                 }
             }

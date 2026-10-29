@@ -209,4 +209,26 @@ import GRDB
         let later = snap.cardStatus(f.unica, asOf: DayDate(year: 2027, month: 3, day: 1))
         #expect(later.installmentsOutstanding == 0 && later.plans.isEmpty)
     }
+
+    @Test func commitmentTemplates() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov)
+        try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Ayuda familiar", amount: 300_000, date: f.nov.firstDay), asTemplate: true)
+        try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Salida grande", amount: 100_000, date: f.nov.firstDay), asTemplate: false)
+        #expect(try f.db.snapshot().commitmentTemplates.map(\.name) == ["Ayuda familiar"])
+
+        try f.db.startMonth(f.dec)
+        var dec = try f.db.snapshot().commitments.filter { f.dec.contains($0.date) }
+        #expect(dec.map(\.name) == ["Ayuda familiar"])
+        #expect(try f.db.snapshot().monthSummary(f.dec).necessary == 300_000)
+
+        // Borrar en diciembre (futuro) no archiva; borrar como plantilla sí.
+        try f.db.deleteCommitments(ids: [dec[0].id!], asTemplate: false)
+        #expect(try f.db.snapshot().commitmentTemplates.filter { !$0.isArchived }.count == 1)
+        let nov = try f.db.snapshot().commitments.first { $0.name == "Ayuda familiar" && f.nov.contains($0.date) }!
+        try f.db.deleteCommitments(ids: [nov.id!], asTemplate: true)
+        try f.db.startMonth(YearMonth(year: 2027, month: 1))
+        dec = try f.db.snapshot().commitments.filter { YearMonth(year: 2027, month: 1).contains($0.date) }
+        #expect(dec.isEmpty)
+    }
 }
