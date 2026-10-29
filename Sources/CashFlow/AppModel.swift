@@ -9,6 +9,8 @@ final class AppModel {
     private(set) var snapshot = Snapshot()
     var month: YearMonth = .current()
     var errorMessage: String?
+    /// Mensaje breve tras registrar algo por enlace.
+    var toast: String?
 
     /// Idioma de la interfaz. Inglés por defecto.
     var language: AppLanguage {
@@ -168,6 +170,46 @@ final class AppModel {
     /// Fecha por defecto para un registro nuevo: hoy si estamos en el mes elegido, si no el primer día.
     var defaultDate: DayDate {
         month.contains(today) ? today : month.firstDay
+    }
+
+    // MARK: Enlaces desde Atajos
+
+    /// Registra el gasto que describe el enlace. Devuelve la URL de retorno si la hay.
+    func handle(_ url: URL) -> URL? {
+        guard let link = DeepLink.parse(url) else {
+            errorMessage = T("Unrecognized link: %@", url.absoluteString)
+            return nil
+        }
+        let date = link.date ?? today
+        let rate = link.currency == .usd ? rate : nil
+        if link.currency == .usd && (rate ?? 0) <= 0 {
+            errorMessage = T("No exchange rate yet. Update it in Settings.")
+            return nil
+        }
+        if let key = link.card {
+            guard let card = DeepLink.match(key, in: activeCards, id: \.id, name: \.name) else {
+                errorMessage = T("Credit card not found: %@", key)
+                return nil
+            }
+            let e = CardExpense(cardId: card.id!, date: date, amount: link.amount, currency: link.currency, rate: rate, reason: link.reason)
+            if write({ db in var e = e; try e.insert(db) }) {
+                toast = T("Added %@ · %@ (%@)", MoneyFormat.cop(e.amountCOP), link.reason, card.name)
+            }
+        } else {
+            var fundId: Int64?
+            if let key = link.fund {
+                guard let fund = DeepLink.match(key, in: activeFunds, id: \.id, name: \.name) else {
+                    errorMessage = T("Fund not found: %@", key)
+                    return nil
+                }
+                fundId = fund.id
+            }
+            let e = Expense(date: date, amount: link.amount, currency: link.currency, rate: rate, reason: link.reason, fundId: fundId)
+            if perform({ try db.saveExpense(e) }) {
+                toast = T("Added %@ · %@ (%@)", MoneyFormat.cop(e.amountCOP), link.reason, fundName(fundId))
+            }
+        }
+        return link.callback
     }
 
     // MARK: TRM

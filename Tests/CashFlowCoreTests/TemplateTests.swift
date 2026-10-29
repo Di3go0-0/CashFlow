@@ -407,4 +407,19 @@ import GRDB
         #expect(snap.adjustments.first?.amount == 12_000)
         #expect(snap.cardStatus(f.unica, asOf: d).debt == 0)
     }
+
+    @Test func deepLinkParsing() {
+        let l = DeepLink.parse(URL(string: "cashflow://add?amount=45.000&reason=D1&card=%C3%9Anica&x-success=shortcuts://")!)!
+        #expect(l.amount == 45_000 && l.currency == .cop && l.reason == "D1" && l.card == "Crédito" && l.fund == nil)
+        #expect(l.callback?.absoluteString == "shortcuts://")
+        let u = DeepLink.parse(URL(string: "cashflow://add?amount=12,5&usd=1&reason=App&fund=2&date=2026-11-03")!)!
+        #expect(u.amount == 1250 && u.currency == .usd && u.fund == "2" && u.date == DayDate(year: 2026, month: 11, day: 3))
+        #expect(DeepLink.parse(URL(string: "cashflow://add?reason=x")!) == nil)
+        #expect(DeepLink.parse(URL(string: "other://add?amount=1")!) == nil)
+        let cards = [Card(id: 1, name: "Crédito Único", creditLimit: 0, cutDay: 1, payDay: 2), Card(id: 2, name: "StoreCard", creditLimit: 0, cutDay: 1, payDay: 2)]
+        #expect(DeepLink.match("2", in: cards, id: \.id, name: \.name)?.name == "StoreCard")
+        #expect(DeepLink.match("unica", in: cards, id: \.id, name: \.name) == nil)
+        #expect(DeepLink.match("única", in: cards, id: \.id, name: \.name)?.id == 1)
+        #expect(DeepLink.match("rappi", in: cards, id: \.id, name: \.name)?.id == 2)
+    }
 }

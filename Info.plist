@@ -14,6 +14,17 @@
 	<array>
 		<string>es</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.diegorincon.cashflow</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cashflow</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Automatic</string>
 </dict>

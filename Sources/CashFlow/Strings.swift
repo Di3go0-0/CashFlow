@@ -15,6 +15,11 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Unrecognized link: %@": "Enlace no reconocido: %@",
+        "No exchange rate yet. Update it in Settings.": "No hay TRM todavía. Actualízala en Ajustes.",
+        "Credit card not found: %@": "Tarjeta de crédito no encontrada: %@",
+        "Fund not found: %@": "Fondo no encontrado: %@",
+        "Added %@ · %@ (%@)": "Registrado %@ · %@ (%@)",
         "Set what is left in the pocket": "Fijar lo que queda en el bolsillo",
         "Pocket after paying": "Bolsillo después de pagar",
         "Computed": "Calculado",
@@ -304,6 +309,11 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Unrecognized link: %@": "Lien non reconnu : %@",
+        "No exchange rate yet. Update it in Settings.": "Pas encore de taux de change. Mettez-le à jour dans les Réglages.",
+        "Credit card not found: %@": "Carte de crédit introuvable : %@",
+        "Fund not found: %@": "Fonds introuvable : %@",
+        "Added %@ · %@ (%@)": "Ajouté %@ · %@ (%@)",
         "Set what is left in the pocket": "Fixer ce qui reste dans la poche",
         "Pocket after paying": "Poche après paiement",
         "Computed": "Calculé",
