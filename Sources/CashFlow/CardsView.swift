@@ -400,27 +400,54 @@ struct CardPaymentView: View {
     var status: CardStatus
     @State private var amount: Int64 = 0
     @State private var date: DayDate = .today()
-    @State private var markPaid = true
+    @State private var covers: Coverage = .previousCut
+
+    enum Coverage: Hashable { case previousCut, allPending, none }
+
+    private var pendingThroughToday: Int64 {
+        status.expenses.filter { !$0.expense.isPaid && $0.expense.date <= model.today }.reduce(0) { $0 + $1.expense.amountCOP }
+    }
+
+    private var coveredAmount: Int64 {
+        switch covers {
+        case .previousCut: status.dueNow
+        case .allPending: pendingThroughToday
+        case .none: 0
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
+                    Picker("Este pago cubre", selection: $covers) {
+                        Text("Hasta el corte del \(status.cycle.previous.end.shortDisplay) · \(MoneyFormat.cop(status.dueNow))").tag(Coverage.previousCut)
+                        Text("Todo lo pendiente hasta hoy · \(MoneyFormat.cop(pendingThroughToday))").tag(Coverage.allPending)
+                        Text("Nada, solo registrar el pago").tag(Coverage.none)
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .onChange(of: covers) { _, _ in
+                        if coveredAmount > 0 { amount = coveredAmount }
+                    }
+                } header: {
+                    Text("Gastos que quedan pagados")
+                } footer: {
+                    Text("Los gastos cubiertos se marcan como pagados y salen de la deuda. El monto sale del bolsillo de pago.")
+                }
+                Section {
                     MoneyField(title: "Monto", amount: $amount)
+                        .id(covers)
                     DayDatePicker(title: "Fecha", day: $date)
                 } footer: {
                     Text("Bolsillo de pago: \(MoneyFormat.cop(status.pocketBalance)). Deuda total: \(MoneyFormat.cop(status.debt)).")
-                }
-                Section {
-                    Toggle("Marcar pagados los gastos hasta el corte del \(status.cycle.previous.end.shortDisplay)", isOn: $markPaid)
-                } footer: {
-                    Text("Gastos sin pagar hasta esa fecha: \(MoneyFormat.cop(status.dueNow)).")
                 }
             }
             .navigationTitle("Pago a \(status.card.name)")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                amount = status.dueNow > 0 ? status.dueNow : status.debt
+                covers = status.dueNow > 0 ? .previousCut : .allPending
+                amount = coveredAmount > 0 ? coveredAmount : status.debt
                 date = model.today
             }
             .toolbar {
@@ -428,7 +455,11 @@ struct CardPaymentView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Registrar") {
                         let p = CardPayment(cardId: status.card.id!, date: date, amount: amount)
-                        let through: DayDate? = markPaid ? status.cycle.previous.end : nil
+                        let through: DayDate? = switch covers {
+                        case .previousCut: status.cycle.previous.end
+                        case .allPending: model.today
+                        case .none: nil
+                        }
                         if model.perform({ try model.db.payCard(p, markPaidThrough: through) }) { dismiss() }
                     }
                     .disabled(amount <= 0)
