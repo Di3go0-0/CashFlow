@@ -265,9 +265,12 @@ public struct CardStatus: Hashable, Sendable, Identifiable {
     /// Sin pagar y con fecha hasta el corte anterior: es lo que vence en el próximo pago.
     public var dueNow: Int64
     public var expenses: [CardExpenseStatus]
+    /// Cuotas de compras a crédito que aún no se han facturado. Ocupan cupo.
+    public var installmentsOutstanding: Int64
+    public var plans: [InstallmentPlan]
 
     public var id: Int64? { card.id }
-    public var available: Int64 { card.creditLimit - debt }
+    public var available: Int64 { card.creditLimit - debt - installmentsOutstanding }
 }
 
 public extension Snapshot {
@@ -281,6 +284,7 @@ public extension Snapshot {
         let cycle = card.cycle(containing: asOf)
         let prevEnd = cycle.previous.end
         let pocket = pocket(of: cardId)
+        let cardPlans = plans.filter { $0.cardId == cardId && $0.outstanding(after: asOf.yearMonth) > 0 }
         return CardStatus(
             card: card,
             pocket: pocket,
@@ -290,7 +294,9 @@ public extension Snapshot {
             pocketBalance: pocket.map { balance(of: $0.id!, asOf: asOf) } ?? 0,
             cycleTotal: statuses.filter { cycle.contains($0.expense.date) }.reduce(0) { $0 + $1.expense.amountCOP },
             dueNow: unpaid.filter { $0.expense.date <= prevEnd }.reduce(0) { $0 + $1.expense.amountCOP },
-            expenses: statuses
+            expenses: statuses,
+            installmentsOutstanding: cardPlans.reduce(0) { $0 + $1.outstanding(after: asOf.yearMonth) },
+            plans: cardPlans
         )
     }
 

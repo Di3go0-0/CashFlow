@@ -288,6 +288,20 @@ public struct InstallmentPlan: Codable, Identifiable, Hashable, Sendable, Fetcha
         return (month.year * 12 + month.month) - (startMonth.year * 12 + startMonth.month) + 1
     }
 
+    /// Cuotas ya facturadas hasta un mes, incluido ese mes.
+    public func billedInstallments(through month: YearMonth) -> Int {
+        if month < startMonth { return 0 }
+        if month > endMonth { return installmentCount }
+        return installmentNumber(in: month) ?? 0
+    }
+
+    /// Lo que falta por facturar después de un mes. Ocupa cupo en la tarjeta.
+    public func outstanding(after month: YearMonth) -> Int64 {
+        let billed = billedInstallments(through: month)
+        if billed >= installmentCount { return 0 }
+        return max(0, totalAmount - monthlyAmount * Int64(billed))
+    }
+
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 

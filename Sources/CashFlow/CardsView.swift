@@ -111,6 +111,10 @@ struct CardDetailView: View {
                 Section {
                     MoneyRow(title: "Deuda", amount: st.debt, emphasis: true)
                     MoneyRow(title: "Disponible", amount: st.available, subtitle: "Cupo \(MoneyFormat.cop(st.card.creditLimit))")
+                    if st.installmentsOutstanding > 0 {
+                        MoneyRow(title: "Cuotas por facturar", amount: st.installmentsOutstanding,
+                                 subtitle: st.plans.map { "\($0.name): \($0.installmentCount - $0.billedInstallments(through: model.month)) de \($0.installmentCount)" }.joined(separator: " · "))
+                    }
                     MoneyRow(title: "Bolsillo de pago", amount: st.pocketBalance, color: st.pocketBalance < st.dueNow ? .orange : .primary)
                     MoneyRow(title: "Falta amortiguar", amount: st.uncovered, color: st.uncovered > 0 ? .red : .secondary,
                              subtitle: "Gastos sin pagar que aún no tienen abono completo")

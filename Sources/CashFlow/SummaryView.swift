@@ -109,7 +109,9 @@ struct CardSummaryRow: View {
             HStack {
                 Text("Corta en \(cut) d · \(status.cycle.end.shortDisplay)")
                 Spacer()
-                Text("Disp. \(MoneyFormat.cop(status.available))")
+                Text(status.installmentsOutstanding > 0
+                     ? "Disp. \(MoneyFormat.cop(status.available)) · cuotas \(MoneyFormat.cop(status.installmentsOutstanding))"
+                     : "Disp. \(MoneyFormat.cop(status.available))")
             }
             .font(.caption).foregroundStyle(.secondary)
             if status.dueNow > 0 {

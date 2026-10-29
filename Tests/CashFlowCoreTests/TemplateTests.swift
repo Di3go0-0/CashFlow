@@ -187,4 +187,26 @@ import GRDB
         #expect(try f.db.snapshot().consumable(gym.id)?.isPaid == false)
         #expect(s.consumablesUnpaid == 140_000 && s.consumablesPending == 120_000)
     }
+
+    @Test func installmentPlanConsumesCardLimit() throws {
+        let f = try Fixture()
+        try f.db.write { db in
+            var p = InstallmentPlan(name: "Caminadora", totalAmount: 529_000, installmentCount: 6, cardId: f.unica.id!,
+                                    startMonth: YearMonth(year: 2026, month: 9))
+            try p.insert(db)
+        }
+        let snap = try f.db.snapshot()
+        let plan = snap.plans[0]
+        #expect(plan.billedInstallments(through: YearMonth(year: 2026, month: 8)) == 0)
+        #expect(plan.billedInstallments(through: YearMonth(year: 2026, month: 10)) == 2)
+        #expect(plan.billedInstallments(through: YearMonth(year: 2027, month: 6)) == 6)
+        #expect(plan.outstanding(after: YearMonth(year: 2026, month: 10)) == 529_000 - 2 * 88_166)
+        #expect(plan.outstanding(after: YearMonth(year: 2027, month: 2)) == 0)
+
+        let st = snap.cardStatus(f.unica, asOf: DayDate(year: 2026, month: 10, day: 28))
+        #expect(st.installmentsOutstanding == 352_668)
+        #expect(st.available == 4_500_000 - 352_668)
+        let later = snap.cardStatus(f.unica, asOf: DayDate(year: 2027, month: 3, day: 1))
+        #expect(later.installmentsOutstanding == 0 && later.plans.isEmpty)
+    }
 }
