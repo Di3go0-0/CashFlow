@@ -159,18 +159,15 @@ public extension AppDatabase {
         guard let p = try snapshot().projection(for: month) else { return }
         try write { db in
             try Commitment.filter(Column("projectionId") == p.id! && Column("kind") == CommitmentKind.adjustment.rawValue).deleteAll(db)
-            try Expense.filter(Column("fromConsumables") == true && Column("consumableId") == nil && Column("reason") == label
-                               && Column("date") >= month.firstDay.key && Column("date") <= month.lastDay.key).deleteAll(db)
-            try Consumable.filter(Column("projectionId") == p.id! && Column("name") == label).deleteAll(db)
+            try Consumable.filter(Column("projectionId") == p.id! && Column("isAdjustment") == true).deleteAll(db)
             try Consumable.filter(Column("projectionId") == p.id! && Column("isPaid") == false)
                 .updateAll(db, Column("isPaid").set(to: true), Column("paidDate").set(to: month.lastDay.key))
         }
         var s = try snapshot().monthSummary(month)
-        if s.consumablesPending > 0 {
-            try saveExpense(Expense(date: month.lastDay, amount: s.consumablesPending, currency: .cop, reason: label, fundId: nil, fromConsumables: true))
-        } else if s.consumablesPending < 0 {
+        if s.consumablesPending != 0 {
+            // Ajusta el presupuesto del apartado, en más o en menos, hasta dejarlo en cero.
             try write { db in
-                var c = Consumable(projectionId: p.id!, name: label, amount: -s.consumablesPending, isPaid: true, paidDate: month.lastDay, sortOrder: 999)
+                var c = Consumable(projectionId: p.id!, name: label, amount: -s.consumablesPending, isPaid: true, paidDate: month.lastDay, sortOrder: 999, isAdjustment: true)
                 try c.insert(db)
             }
         }
@@ -525,7 +522,8 @@ public extension AppDatabase {
     // MARK: Tarjetas: pagos
 
     /// Registra un pago de tarjeta y, si se pide, marca como pagados los gastos pendientes hasta una fecha.
-    func payCard(_ payment: CardPayment, markPaidThrough: DayDate?) throws {
+    /// Con `pocketBalanceAfter`, deja el bolsillo de pago exactamente en ese saldo mediante un ajuste manual.
+    func payCard(_ payment: CardPayment, markPaidThrough: DayDate?, pocketBalanceAfter: Int64? = nil) throws {
         try write { db in
             var p = payment
             try p.insert(db)
@@ -533,6 +531,13 @@ public extension AppDatabase {
                 try CardExpense
                     .filter(Column("cardId") == payment.cardId && Column("isPaid") == false && Column("date") <= through)
                     .updateAll(db, Column("isPaid").set(to: true))
+            }
+        }
+        if let target = pocketBalanceAfter, let pocket = try snapshot().pocket(of: payment.cardId) {
+            let actual = try snapshot().balance(of: pocket.id!, asOf: payment.date)
+            let diff = target - actual
+            if diff != 0 {
+                try adjustFund(pocket.id!, amount: diff, date: payment.date, reason: L10n.tr("Pocket reconciliation"))
             }
         }
     }

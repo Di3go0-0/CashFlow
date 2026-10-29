@@ -15,6 +15,11 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Set what is left in the pocket": "Fijar lo que queda en el bolsillo",
+        "Pocket after paying": "Bolsillo después de pagar",
+        "Computed": "Calculado",
+        "The difference is recorded as a pocket reconciliation": "La diferencia se registra como cuadre del bolsillo",
+        "Optional. Use it when the real balance in your bank pocket differs from what the app computes.": "Opcional. Úsalo cuando el saldo real del bolsillo en tu banco no coincida con lo que calcula la app.",
         "Closing adjustments": "Ajustes de cierre",
         "Absorbs the difference so a closed month ends with zero remaining.": "Absorbe la diferencia para que un mes cerrado termine con restante cero.",
         "Close %@": "Cerrar %@",
@@ -299,6 +304,11 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Set what is left in the pocket": "Fixer ce qui reste dans la poche",
+        "Pocket after paying": "Poche après paiement",
+        "Computed": "Calculé",
+        "The difference is recorded as a pocket reconciliation": "La différence est enregistrée comme ajustement de la poche",
+        "Optional. Use it when the real balance in your bank pocket differs from what the app computes.": "Facultatif. À utiliser quand le solde réel de votre poche bancaire diffère du calcul de l'app.",
         "Closing adjustments": "Ajustements de clôture",
         "Absorbs the difference so a closed month ends with zero remaining.": "Absorbe la différence pour qu'un mois clôturé termine avec un restant nul.",
         "Close %@": "Clôturer %@",

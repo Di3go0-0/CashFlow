@@ -257,14 +257,15 @@ public extension Snapshot {
 
         let cons = consumables(for: month)
         let consTotal = cons.reduce(0) { $0 + $1.amount }
-        let consPaid = cons.filter(\.isPaid).reduce(0) { $0 + $1.amount }
-        let consUnpaid = consTotal - consPaid
+        let realItems = cons.filter { !$0.isAdjustment }
+        let consPaid = realItems.filter(\.isPaid).reduce(0) { $0 + $1.amount }
+        let consUnpaid = realItems.filter { !$0.isPaid }.reduce(0) { $0 + $1.amount }
         let ex = expenses.filter { month.contains($0.date) }
         let cex = cardExpenses.filter { month.contains($0.date) }
         let monthAllocs = allocations.filter { month.contains($0.date) }
         // Un ítem pagado con un gasto o abono ligado ya está contado ahí; los demás pagados cuentan por su valor.
         let linked = Set(allocations.compactMap(\.consumableId) + expenses.compactMap(\.consumableId))
-        let consPaidDirect = cons.filter { $0.isPaid && !linked.contains($0.id!) }.reduce(0) { $0 + $1.amount }
+        let consPaidDirect = realItems.filter { $0.isPaid && !linked.contains($0.id!) }.reduce(0) { $0 + $1.amount }
         let consSpent = ex.filter(\.fromConsumables).reduce(0) { $0 + $1.amountCOP }
             + monthAllocs.filter(\.fromConsumables).reduce(0) { $0 + $1.amount }
             + consPaidDirect

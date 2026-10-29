@@ -265,6 +265,18 @@ public final class AppDatabase: Sendable {
                 }
             }
         }
+        m.registerMigration("v6") { db in
+            // Limpieza de filas huérfanas (quedaron de borrados hechos sin claves foráneas).
+            try db.execute(sql: "DELETE FROM incomeDeduction WHERE incomeId NOT IN (SELECT id FROM income)")
+            try db.execute(sql: "DELETE FROM incomeBonus WHERE incomeId NOT IN (SELECT id FROM income)")
+            try db.execute(sql: "DELETE FROM cardAllocation WHERE cardExpenseId NOT IN (SELECT id FROM cardExpense)")
+            try db.execute(sql: "DELETE FROM contribution WHERE projectionId NOT IN (SELECT id FROM projection)")
+            try db.execute(sql: "DELETE FROM commitment WHERE projectionId NOT IN (SELECT id FROM projection)")
+            try db.execute(sql: "DELETE FROM consumable WHERE projectionId NOT IN (SELECT id FROM projection)")
+            try db.alter(table: "consumable") { t in
+                t.add(column: "isAdjustment", .boolean).notNull().defaults(to: false)
+            }
+        }
         return m
     }
 }

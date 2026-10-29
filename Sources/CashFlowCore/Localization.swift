@@ -55,6 +55,7 @@ public enum L10n {
         "Consumables": "Consumibles",
         "Consumable: %@": "Consumible: %@",
         "%@ payment": "Pago %@",
+        "Pocket reconciliation": "Cuadre del bolsillo",
     ]
 
     static let fr: [String: String] = [
@@ -68,5 +69,6 @@ public enum L10n {
         "Consumables": "Consommables",
         "Consumable: %@": "Consommable : %@",
         "%@ payment": "Paiement %@",
+        "Pocket reconciliation": "Ajustement de la poche",
     ]
 }

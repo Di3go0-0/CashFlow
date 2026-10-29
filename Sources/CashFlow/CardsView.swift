@@ -419,6 +419,8 @@ struct CardPaymentView: View {
     @State private var amount: Int64 = 0
     @State private var date: DayDate = .today()
     @State private var covers: Coverage = .previousCut
+    @State private var setPocket = false
+    @State private var pocketAfter: Int64 = 0
 
     enum Coverage: Hashable { case previousCut, allPending, none }
 
@@ -460,6 +462,16 @@ struct CardPaymentView: View {
                 } footer: {
                     Text(T("Payment pocket: %@. Total debt: %@.", MoneyFormat.cop(status.pocketBalance), MoneyFormat.cop(status.debt)))
                 }
+                Section {
+                    Toggle(T("Set what is left in the pocket"), isOn: $setPocket)
+                    if setPocket {
+                        MoneyField(title: T("Pocket after paying"), amount: $pocketAfter)
+                        MoneyRow(title: T("Computed"), amount: status.pocketBalance - amount, color: .secondary,
+                                 subtitle: T("The difference is recorded as a pocket reconciliation"))
+                    }
+                } footer: {
+                    Text(T("Optional. Use it when the real balance in your bank pocket differs from what the app computes."))
+                }
             }
             .navigationTitle(T("Payment to %@", status.card.name))
             .navigationBarTitleDisplayMode(.inline)
@@ -467,6 +479,7 @@ struct CardPaymentView: View {
                 covers = status.dueNow > 0 ? .previousCut : .allPending
                 amount = coveredAmount > 0 ? coveredAmount : status.debt
                 date = model.today
+                pocketAfter = max(0, status.pocketBalance - amount)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
@@ -478,7 +491,8 @@ struct CardPaymentView: View {
                         case .allPending: model.today
                         case .none: nil
                         }
-                        if model.perform({ try model.db.payCard(p, markPaidThrough: through) }) { dismiss() }
+                        let target: Int64? = setPocket ? pocketAfter : nil
+                        if model.perform({ try model.db.payCard(p, markPaidThrough: through, pocketBalanceAfter: target) }) { dismiss() }
                     }
                     .disabled(amount <= 0)
                 }

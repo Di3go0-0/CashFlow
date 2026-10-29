@@ -206,6 +206,9 @@ struct MonthView: View {
             }
             ForEach(items) { c in
                 HStack {
+                    if c.isAdjustment {
+                        Image(systemName: "lock.fill").foregroundStyle(.secondary).font(.title3)
+                    } else {
                     Button {
                         model.perform { try model.db.setConsumablePaid(id: c.id!, paid: !c.isPaid, on: model.defaultDate) }
                     } label: {
@@ -214,6 +217,7 @@ struct MonthView: View {
                             .font(.title3)
                     }
                     .buttonStyle(.borderless)
+                    }
                     Button { editingConsumable = c } label: {
                         HStack {
                             VStack(alignment: .leading) {
