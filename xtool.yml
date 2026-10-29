@@ -1,4 +1,10 @@
 version: 1
 bundleID: com.diegorincon.cashflow
+product: CashFlow
 infoPath: Info.plist
 iconPath: Icon.png
+entitlementsPath: CashFlow.entitlements
+extensions:
+  - product: CashFlowWidget
+    infoPath: CashFlowWidget-Info.plist
+    entitlementsPath: CashFlow.entitlements

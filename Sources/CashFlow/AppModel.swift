@@ -1,6 +1,7 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import GRDB
+import WidgetKit
 import CashFlowCore
 
 @Observable @MainActor
@@ -63,6 +64,7 @@ final class AppModel {
                 snapshot = try db.snapshot()
             }
             if remindersEnabled { Reminders.reschedule(cards: activeCards, today: today) }
+            publishWidgetSnapshot()
         } catch {
             report(error)
         }
@@ -170,6 +172,14 @@ final class AppModel {
     /// Fecha por defecto para un registro nuevo: hoy si estamos en el mes elegido, si no el primer día.
     var defaultDate: DayDate {
         month.contains(today) ? today : month.firstDay
+    }
+
+    /// Deja en el App Group lo que muestra el widget y le pide que se actualice.
+    private(set) var widgetContainerAvailable = false
+    func publishWidgetSnapshot() {
+        let snap = WidgetSnapshot.make(snapshot, month: .current(), today: today)
+        widgetContainerAvailable = (try? snap.write()) ?? false
+        if widgetContainerAvailable { WidgetCenter.shared.reloadAllTimelines() }
     }
 
     // MARK: Enlaces desde Atajos

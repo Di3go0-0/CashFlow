@@ -15,6 +15,11 @@ let package = Package(
             name: "CashFlow",
             targets: ["CashFlow"]
         ),
+        // Extensión de widget (ver xtool.yml).
+        .library(
+            name: "CashFlowWidget",
+            targets: ["CashFlowWidget"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
@@ -30,7 +35,14 @@ let package = Package(
         // La app SwiftUI.
         .target(
             name: "CashFlow",
-            dependencies: ["CashFlowCore"]
+            dependencies: ["CashFlowCore"],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-headerpad_max_install_names"])]
+        ),
+        // Widget: solo lee un JSON que la app deja en el App Group.
+        .target(
+            name: "CashFlowWidget",
+            // xtool enlaza la extensión con entrada _NSExtensionMain; sin esto el linker descarta el @main del WidgetBundle.
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-u", "-Xlinker", "_main", "-Xlinker", "-headerpad_max_install_names"])]
         ),
         .testTarget(
             name: "CashFlowCoreTests",
