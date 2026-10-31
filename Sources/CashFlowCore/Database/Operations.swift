@@ -220,9 +220,9 @@ public extension AppDatabase {
                 }
                 pending = rest
             }
-            // 2) Solo por monto (±3 %), únicamente dentro del mismo mes.
+            // 2) Solo por monto (±3 %), únicamente dentro del mismo mes y nunca para cuotas de un plan (esas van por nombre).
             for m in pending {
-                if let c = sameMonth.first(where: { !used.contains($0.id!) && Swift.abs($0.amount - m.amount) <= max(2_000, m.amount * 3 / 100) }) {
+                if let c = sameMonth.first(where: { !used.contains($0.id!) && $0.installmentPlanId == nil && Swift.abs($0.amount - m.amount) <= max(2_000, m.amount * 3 / 100) }) {
                     try link(m, c)
                 }
             }
