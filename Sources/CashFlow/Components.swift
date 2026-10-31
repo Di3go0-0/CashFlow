@@ -161,10 +161,12 @@ enum MoneySource: Hashable {
     case extra
     case consumables
     case consumable(Int64)
+    case commitment(Int64)
     case fund(Int64)
 
-    init(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?) {
-        if let c = consumableId { self = .consumable(c) }
+    init(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?, commitmentId: Int64? = nil) {
+        if let cm = commitmentId { self = .commitment(cm) }
+        else if let c = consumableId { self = .consumable(c) }
         else if fromConsumables { self = .consumables }
         else if let f = fundId { self = .fund(f) }
         else { self = .extra }
@@ -172,6 +174,7 @@ enum MoneySource: Hashable {
 
     var fundId: Int64? { if case .fund(let id) = self { return id } else { return nil } }
     var consumableId: Int64? { if case .consumable(let id) = self { return id } else { return nil } }
+    var commitmentId: Int64? { if case .commitment(let id) = self { return id } else { return nil } }
     var fromConsumables: Bool {
         switch self {
         case .consumables, .consumable: true
@@ -185,15 +188,30 @@ struct SourcePicker: View {
     var title = ""
     @Binding var source: MoneySource
     var currentConsumableId: Int64?
+    var currentCommitmentId: Int64?
     @Environment(AppModel.self) private var model
 
     private var items: [Consumable] {
         model.consumables().filter { !$0.isPaid || $0.id == currentConsumableId }
     }
 
+    private var openCommitments: [Commitment] {
+        guard let p = model.projection else { return [] }
+        return model.snapshot.commitments.filter { c in
+            c.projectionId == p.id && c.kind != .adjustment && (model.snapshot.paid(toward: c.id!) < c.amount || c.id == currentCommitmentId)
+        }
+    }
+
     var body: some View {
         Picker(title.isEmpty ? T("Paid from") : title, selection: $source) {
             Text(T("Extra balance of the month")).tag(MoneySource.extra)
+            if !openCommitments.isEmpty {
+                Section(T("Commitments of %@", model.month.monthName)) {
+                    ForEach(openCommitments) { c in
+                        Text("\(c.name) · \(MoneyFormat.cop(c.amount - model.snapshot.paid(toward: c.id!)))").tag(MoneySource.commitment(c.id!))
+                    }
+                }
+            }
             Section(T("Consumables of %@", model.month.monthName)) {
                 Text(T("Consumables pool")).tag(MoneySource.consumables)
                 ForEach(items) { c in
@@ -223,6 +241,11 @@ struct SourceBalanceRow: View {
         case .consumable:
             MoneyRow(title: T("Left in consumables pool"), amount: model.summary.consumablesPending,
                      subtitle: T("The item will be marked as paid"))
+        case .commitment(let id):
+            if let c = model.snapshot.commitment(id) {
+                MoneyRow(title: T("Left of this commitment"), amount: c.amount - model.snapshot.paid(toward: id),
+                         subtitle: T("Comes out of the money already set aside for it"))
+            }
         case .fund(let id):
             MoneyRow(title: T("Fund balance"), amount: model.snapshot.balance(of: id, asOf: model.today))
         }

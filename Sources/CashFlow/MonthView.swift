@@ -269,11 +269,19 @@ struct MonthView: View {
         Section {
             let items = model.commitments(of: p, kind: kind)
             ForEach(items) { c in
+                let paid = model.snapshot.paid(toward: c.id!)
                 Button { editingCommitment = c } label: {
                     HStack {
-                        Text(c.name)
+                        Image(systemName: paid >= c.amount ? "checkmark.circle.fill" : (paid > 0 ? "circle.lefthalf.filled" : "circle"))
+                            .foregroundStyle(paid >= c.amount ? .green : .secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(c.name)
+                            if paid > 0 && paid < c.amount {
+                                Text(T("Paid %@ of %@", MoneyFormat.cop(paid), MoneyFormat.cop(c.amount))).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                         Spacer()
-                        MoneyText(amount: c.amount)
+                        MoneyText(amount: c.amount).foregroundStyle(paid >= c.amount ? .secondary : .primary)
                     }
                 }
                 .tint(.primary)
@@ -302,6 +310,10 @@ struct MonthView: View {
         return Section(T("Result")) {
             MoneyRow(title: T("Income"), amount: s.income)
             MoneyRow(title: T("Committed"), amount: -s.committed, subtitle: T("Funds, consumables, debts and necessary"))
+            if s.commitmentsUnpaid > 0 {
+                MoneyRow(title: T("Commitments still to pay"), amount: s.commitmentsUnpaid, color: .secondary,
+                         subtitle: T("Record each payment as an expense paid from its commitment"))
+            }
             MoneyRow(title: T("Extra balance"), amount: s.extraBalance, emphasis: true, color: s.extraBalance < 0 ? .red : .primary)
             MoneyRow(title: T("Remaining today"), amount: s.remaining, subtitle: T("Extra balance minus what was already spent from it"))
         }

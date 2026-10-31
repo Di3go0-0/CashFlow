@@ -15,6 +15,13 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Commitments of %@": "Compromisos de %@",
+        "Left of this commitment": "Queda de este compromiso",
+        "Comes out of the money already set aside for it": "Sale de la plata ya apartada para él",
+        "Paid %@ of %@": "Pagado %@ de %@",
+        "Commitments still to pay": "Compromisos por pagar",
+        "Record each payment as an expense paid from its commitment": "Registra cada pago como un gasto que sale de su compromiso",
+        "Money that actually went out": "Plata que realmente salió",
         "Unrecognized link: %@": "Enlace no reconocido: %@",
         "No exchange rate yet. Update it in Settings.": "No hay TRM todavía. Actualízala en Ajustes.",
         "Credit card not found: %@": "Tarjeta de crédito no encontrada: %@",
@@ -309,6 +316,13 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Commitments of %@": "Engagements de %@",
+        "Left of this commitment": "Reste de cet engagement",
+        "Comes out of the money already set aside for it": "Provient de l'argent déjà mis de côté pour lui",
+        "Paid %@ of %@": "Payé %@ sur %@",
+        "Commitments still to pay": "Engagements à payer",
+        "Record each payment as an expense paid from its commitment": "Enregistrez chaque paiement comme une dépense payée depuis son engagement",
+        "Money that actually went out": "Argent réellement sorti",
         "Unrecognized link: %@": "Lien non reconnu : %@",
         "No exchange rate yet. Update it in Settings.": "Pas encore de taux de change. Mettez-le à jour dans les Réglages.",
         "Credit card not found: %@": "Carte de crédit introuvable : %@",

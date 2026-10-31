@@ -374,11 +374,15 @@ struct AllocationEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                SourcePicker(source: $source, currentConsumableId: allocation.consumableId)
+                SourcePicker(source: $source, currentConsumableId: allocation.consumableId, currentCommitmentId: allocation.commitmentId)
                     .onChange(of: source) { _, new in
                         allocation.fundId = new.fundId
                         allocation.consumableId = new.consumableId
                         allocation.fromConsumables = new.fromConsumables
+                        allocation.commitmentId = new.commitmentId
+                        if let id = new.commitmentId, let c = model.snapshot.commitment(id) {
+                            allocation.amount = min(remainingToCover, max(0, c.amount - model.snapshot.paid(toward: id)))
+                        }
                         if let id = new.consumableId, let c = model.snapshot.consumable(id) { allocation.amount = c.amount }
                     }
                 MoneyField(title: T("Amount"), amount: $allocation.amount)
@@ -396,7 +400,7 @@ struct AllocationEditView: View {
             .navigationTitle(T("Top-up"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                source = MoneySource(fundId: allocation.fundId, fromConsumables: allocation.fromConsumables, consumableId: allocation.consumableId)
+                source = MoneySource(fundId: allocation.fundId, fromConsumables: allocation.fromConsumables, consumableId: allocation.consumableId, commitmentId: allocation.commitmentId)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }

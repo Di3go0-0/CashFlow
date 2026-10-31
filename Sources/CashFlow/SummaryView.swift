@@ -55,8 +55,11 @@ struct SummaryView: View {
             Section(T("This month")) {
                 MoneyRow(title: T("Income"), amount: s.income,
                          subtitle: s.pendingIncome > 0 ? T("Pending: %@", MoneyFormat.cop(s.pendingIncome)) : nil)
-                MoneyRow(title: T("Spent"), amount: s.spent)
+                MoneyRow(title: T("Spent"), amount: s.spent, subtitle: T("Money that actually went out"))
                 MoneyRow(title: T("Saved"), amount: s.saved, color: .green)
+                if s.commitmentsUnpaid > 0 {
+                    MoneyRow(title: T("Commitments still to pay"), amount: s.commitmentsUnpaid, color: .secondary)
+                }
                 if s.consumablesTotal > 0 {
                     MoneyRow(title: T("Left in consumables"), amount: s.consumablesPending,
                              color: s.consumablesPending < 0 ? .red : .primary,

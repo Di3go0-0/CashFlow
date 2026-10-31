@@ -422,4 +422,36 @@ import GRDB
         #expect(DeepLink.match("única", in: cards, id: \.id, name: \.name)?.id == 1)
         #expect(DeepLink.match("rappi", in: cards, id: \.id, name: \.name)?.id == 2)
     }
+
+    @Test func expensesPaidFromCommitmentsDoNotDoubleCount() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.linktic.id!, month: f.nov, date: f.nov.firstDay, netAmount: 4_000_000)))
+        try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Family help", amount: 300_000, date: f.nov.firstDay), asTemplate: false)
+        try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .debt, name: "Treadmill", amount: 90_000, date: f.nov.firstDay), asTemplate: false)
+        let cms = try f.db.snapshot().commitments.filter { $0.projectionId == p.id }
+        let family = cms.first { $0.name == "Family help" }!
+        let d = DayDate(year: 2026, month: 11, day: 4)
+        try f.db.saveExpense(Expense(date: d, amount: 300_000, currency: .cop, reason: "Family help", fundId: nil, commitmentId: family.id))
+        let e = try f.db.write { db -> CardExpense in
+            var e = CardExpense(cardId: f.unica.id!, date: d, amount: 89_000, currency: .cop, reason: "Treadmill")
+            try e.insert(db); return e
+        }
+        var snap = try f.db.snapshot()
+        var s = snap.monthSummary(f.nov)
+        #expect(s.spent == 300_000 + 89_000)
+        #expect(s.spentFromExtra == 0)
+        #expect(s.commitmentsUnpaid == 90_000)
+        #expect(s.extraBalance == 4_000_000 - 1_230_000 - 390_000)
+
+        // El abono desde el saldo extra cuenta en fromExtra; religado al compromiso, no.
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: e.id!, fundId: nil, amount: 90_000, date: d))
+        #expect(try f.db.snapshot().monthSummary(f.nov).spentFromExtra == 90_000)
+        let pairs = try f.db.relinkCommitments(months: [f.nov])
+        #expect(pairs.count == 1 && pairs[0].1 == "Treadmill")
+        snap = try f.db.snapshot()
+        s = snap.monthSummary(f.nov)
+        #expect(s.spentFromExtra == 0 && s.commitmentsUnpaid == 0)
+        #expect(snap.expenseSourceName(snap.expenses[0]) == "Commitment: Family help")
+    }
 }

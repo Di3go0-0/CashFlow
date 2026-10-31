@@ -269,11 +269,16 @@ struct ExpenseEditView: View {
                 Section {
                     TextField(T("Reason"), text: $expense.reason)
                     DayDatePicker(title: T("Date"), day: $expense.date)
-                    SourcePicker(source: $source, currentConsumableId: expense.consumableId)
+                    SourcePicker(source: $source, currentConsumableId: expense.consumableId, currentCommitmentId: expense.commitmentId)
                         .onChange(of: source) { _, new in
                             expense.fundId = new.fundId
                             expense.consumableId = new.consumableId
                             expense.fromConsumables = new.fromConsumables
+                            expense.commitmentId = new.commitmentId
+                            if let id = new.commitmentId, let c = model.snapshot.commitment(id) {
+                                if expense.reason.isEmpty { expense.reason = c.name }
+                                if expense.currency == .cop && expense.amount == 0 { expense.amount = c.amount - model.snapshot.paid(toward: id) }
+                            }
                             if let id = new.consumableId, let c = model.snapshot.consumable(id) {
                                 if expense.reason.isEmpty { expense.reason = c.name }
                                 if expense.currency == .cop && expense.amount == 0 { expense.amount = c.amount }
@@ -287,7 +292,7 @@ struct ExpenseEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if isNew { expense.date = model.defaultDate }
-                source = MoneySource(fundId: expense.fundId, fromConsumables: expense.fromConsumables, consumableId: expense.consumableId)
+                source = MoneySource(fundId: expense.fundId, fromConsumables: expense.fromConsumables, consumableId: expense.consumableId, commitmentId: expense.commitmentId)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }

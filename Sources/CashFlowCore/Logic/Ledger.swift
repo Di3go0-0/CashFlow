@@ -65,18 +65,27 @@ public struct Snapshot: Sendable {
 
     /// Nombre legible de la fuente de un abono.
     public func allocationSourceName(_ a: CardAllocation) -> String {
-        sourceName(fundId: a.fundId, fromConsumables: a.fromConsumables, consumableId: a.consumableId)
+        sourceName(fundId: a.fundId, fromConsumables: a.fromConsumables, consumableId: a.consumableId, commitmentId: a.commitmentId)
     }
 
     public func expenseSourceName(_ e: Expense) -> String {
-        sourceName(fundId: e.fundId, fromConsumables: e.fromConsumables, consumableId: e.consumableId)
+        sourceName(fundId: e.fundId, fromConsumables: e.fromConsumables, consumableId: e.consumableId, commitmentId: e.commitmentId)
     }
 
-    public func sourceName(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?) -> String {
+    public func sourceName(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?, commitmentId: Int64? = nil) -> String {
+        if let cm = commitment(commitmentId) { return L10n.tr("Commitment: %@", cm.name) }
         if let c = consumable(consumableId) { return L10n.tr("Consumable: %@", c.name) }
         if fromConsumables { return L10n.tr("Consumables") }
         if let f = fund(fundId) { return f.name }
         return L10n.tr("Extra balance")
+    }
+
+    public func commitment(_ id: Int64?) -> Commitment? { id.flatMap { i in commitments.first { $0.id == i } } }
+
+    /// Lo pagado contra un compromiso: gastos y abonos ligados a él.
+    public func paid(toward commitmentId: Int64) -> Int64 {
+        expenses.filter { $0.commitmentId == commitmentId }.reduce(0) { $0 + $1.amountCOP }
+            + allocations.filter { $0.commitmentId == commitmentId }.reduce(0) { $0 + $1.amount }
     }
 }
 
@@ -225,8 +234,11 @@ public struct MonthSummary: Hashable, Sendable {
     public var consumablesUnpaid: Int64
     /// Aportes a fondos con bandera de ahorro.
     public var saved: Int64
-    /// Gastos sin tarjeta + gastos con tarjeta + deudas + necesarios + consumibles pagados.
+    /// Plata que realmente salió: gastos sin tarjeta + gastos con tarjeta + ítems de consumibles pagados sin registro propio.
+    /// Los compromisos no cuentan: se pagan con gastos ligados a ellos.
     public var spent: Int64
+    /// Compromisos (deudas y necesarios) que aún no tienen gasto ligado por su valor completo.
+    public var commitmentsUnpaid: Int64
     /// Gastos y abonos que salieron del saldo extra.
     public var spentFromExtra: Int64
 
@@ -270,7 +282,8 @@ public extension Snapshot {
             + monthAllocs.filter(\.fromConsumables).reduce(0) { $0 + $1.amount }
             + consPaidDirect
 
-        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + debts + necessary + consPaidDirect
+        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + consPaidDirect
+        let commitmentsUnpaid = cms.filter { $0.kind != .adjustment }.reduce(0) { $0 + max(0, $1.amount - paid(toward: $1.id!)) }
 
         let fromExtra = ex.filter(\.isFromExtra).reduce(0) { $0 + $1.amountCOP }
             + monthAllocs.filter(\.isFromExtra).reduce(0) { $0 + $1.amount }
@@ -278,7 +291,7 @@ public extension Snapshot {
         return MonthSummary(month: month, income: income, pendingIncome: pending, contributions: contributed,
                             debts: debts, necessary: necessary, adjustments: adjustments, consumablesTotal: consTotal, consumablesPaid: consPaid,
                             consumablesSpent: consSpent, consumablesUnpaid: consUnpaid,
-                            saved: saved, spent: spent, spentFromExtra: fromExtra)
+                            saved: saved, spent: spent, commitmentsUnpaid: commitmentsUnpaid, spentFromExtra: fromExtra)
     }
 }
 

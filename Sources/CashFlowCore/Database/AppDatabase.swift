@@ -277,6 +277,14 @@ public final class AppDatabase: Sendable {
                 t.add(column: "isAdjustment", .boolean).notNull().defaults(to: false)
             }
         }
+        m.registerMigration("v7") { db in
+            try db.alter(table: "expense") { t in
+                t.add(column: "commitmentId", .integer).indexed().references("commitment", onDelete: .setNull)
+            }
+            try db.alter(table: "cardAllocation") { t in
+                t.add(column: "commitmentId", .integer).indexed().references("commitment", onDelete: .setNull)
+            }
+        }
         return m
     }
 }

@@ -180,6 +180,56 @@ public extension AppDatabase {
         }
     }
 
+    /// Liga a compromisos los gastos y abonos que salieron del saldo extra y coinciden con un compromiso del mismo mes
+    /// o del siguiente (compra hecha antes del mes en que se planeó), por nombre o por monto (±3 %).
+    /// Devuelve las parejas que ligó. Pensado para datos cargados en bloque.
+    @discardableResult
+    func relinkCommitments(months: [YearMonth]) throws -> [(String, String, Int64)] {
+        var linked: [(String, String, Int64)] = []
+        var used = Set<Int64>()
+        func norm(_ s: String) -> Set<String> {
+            Set(s.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count > 2 })
+        }
+        struct Movement { var reason: String; var amount: Int64; var allocation: CardAllocation?; var expense: Expense? }
+        for month in months {
+            let snap = try snapshot()
+            let sameMonth = snap.commitments.filter { $0.kind != .adjustment && snap.projection(for: month)?.id == $0.projectionId }
+            let nextMonth = snap.commitments.filter { $0.kind != .adjustment && snap.projection(for: month.next)?.id == $0.projectionId }
+            let expenseById = Dictionary(uniqueKeysWithValues: snap.cardExpenses.map { ($0.id!, $0) })
+            var movements: [Movement] = snap.allocations.filter { $0.isFromExtra && month.contains($0.date) }.compactMap { a in
+                expenseById[a.cardExpenseId].map { Movement(reason: $0.reason, amount: $0.amountCOP, allocation: a, expense: nil) }
+            }
+            movements += snap.expenses.filter { $0.isFromExtra && month.contains($0.date) }.map { Movement(reason: $0.reason, amount: $0.amountCOP, allocation: nil, expense: $0) }
+
+            func link(_ m: Movement, _ c: Commitment) throws {
+                used.insert(c.id!)
+                if var a = m.allocation { a.commitmentId = c.id; try saveAllocation(a); linked.append((m.reason, c.name, a.amount)) }
+                if var e = m.expense { e.commitmentId = c.id; try saveExpense(e); linked.append((m.reason, c.name, e.amountCOP)) }
+            }
+            var pending = movements
+            // 1) Por nombre, en el mismo mes y luego en el siguiente (compra hecha antes del mes planeado).
+            for pool in [sameMonth, nextMonth] {
+                var rest: [Movement] = []
+                for m in pending {
+                    let words = norm(m.reason)
+                    if let c = pool.first(where: { !used.contains($0.id!) && !norm($0.name).isDisjoint(with: words) && Swift.abs($0.amount - m.amount) <= max(20_000, m.amount / 5) }) {
+                        try link(m, c)
+                    } else {
+                        rest.append(m)
+                    }
+                }
+                pending = rest
+            }
+            // 2) Solo por monto (±3 %), únicamente dentro del mismo mes.
+            for m in pending {
+                if let c = sameMonth.first(where: { !used.contains($0.id!) && Swift.abs($0.amount - m.amount) <= max(2_000, m.amount * 3 / 100) }) {
+                    try link(m, c)
+                }
+            }
+        }
+        return linked
+    }
+
     // MARK: Ingresos
 
     /// Guarda un ingreso con su desglose. Si `asTemplate`, el desglose pasa a ser la plantilla de la fuente.
@@ -412,6 +462,7 @@ public extension AppDatabase {
         try write { db in
             var e = expense
             e.recomputeCOP()
+            if e.commitmentId != nil { e.fundId = nil; e.fromConsumables = false; e.consumableId = nil }
             if e.fromConsumables { e.fundId = nil }
             if let old = e.id.flatMap({ try? Expense.fetchOne(db, id: $0) }), let oldC = old.consumableId, oldC != e.consumableId,
                var c = try Consumable.fetchOne(db, id: oldC) {
@@ -449,6 +500,7 @@ public extension AppDatabase {
     func saveAllocation(_ allocation: CardAllocation) throws {
         try write { db in
             var a = allocation
+            if a.commitmentId != nil { a.fundId = nil; a.fromConsumables = false; a.consumableId = nil }
             if a.fromConsumables { a.fundId = nil }
             if let old = a.id.flatMap({ try? CardAllocation.fetchOne(db, id: $0) }), let oldC = old.consumableId, oldC != a.consumableId,
                var c = try Consumable.fetchOne(db, id: oldC) {

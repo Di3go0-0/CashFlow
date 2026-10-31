@@ -505,9 +505,12 @@ public struct Expense: Codable, Identifiable, Hashable, Sendable, FetchableRecor
     public var fromConsumables: Bool
     /// Ítem de consumible que paga este gasto (queda marcado pagado).
     public var consumableId: Int64?
+    /// Compromiso (deuda o gasto necesario) que paga este gasto. Sale de la plata ya apartada para él.
+    public var commitmentId: Int64?
 
     public init(id: Int64? = nil, date: DayDate, amount: Int64, currency: Currency, rate: Double? = nil,
-                reason: String, fundId: Int64?, note: String = "", fromConsumables: Bool = false, consumableId: Int64? = nil) {
+                reason: String, fundId: Int64?, note: String = "", fromConsumables: Bool = false, consumableId: Int64? = nil,
+                commitmentId: Int64? = nil) {
         self.id = id
         self.date = date
         self.amount = amount
@@ -519,9 +522,10 @@ public struct Expense: Codable, Identifiable, Hashable, Sendable, FetchableRecor
         self.note = note
         self.fromConsumables = fromConsumables || consumableId != nil
         self.consumableId = consumableId
+        self.commitmentId = commitmentId
     }
 
-    public var isFromExtra: Bool { fundId == nil && !fromConsumables }
+    public var isFromExtra: Bool { fundId == nil && !fromConsumables && commitmentId == nil }
 
     /// Recalcula `amountCOP` y limpia la tasa si la moneda es COP. Llamar antes de guardar tras editar.
     public mutating func recomputeCOP() {
@@ -584,9 +588,11 @@ public struct CardAllocation: Codable, Identifiable, Hashable, Sendable, Fetchab
     public var consumableId: Int64?
     /// Sale del apartado de consumibles del mes (con o sin ítem).
     public var fromConsumables: Bool
+    /// Compromiso (deuda o gasto necesario) que paga este abono.
+    public var commitmentId: Int64?
 
     public init(id: Int64? = nil, cardExpenseId: Int64, fundId: Int64?, amount: Int64, date: DayDate,
-                consumableId: Int64? = nil, fromConsumables: Bool = false) {
+                consumableId: Int64? = nil, fromConsumables: Bool = false, commitmentId: Int64? = nil) {
         self.id = id
         self.cardExpenseId = cardExpenseId
         self.fundId = fundId
@@ -594,9 +600,10 @@ public struct CardAllocation: Codable, Identifiable, Hashable, Sendable, Fetchab
         self.date = date
         self.consumableId = consumableId
         self.fromConsumables = fromConsumables || consumableId != nil
+        self.commitmentId = commitmentId
     }
 
-    public var isFromExtra: Bool { fundId == nil && !fromConsumables }
+    public var isFromExtra: Bool { fundId == nil && !fromConsumables && commitmentId == nil }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }

@@ -110,7 +110,8 @@ struct Fixture {
         #expect(s.extraBalance == 4_497_000 - 1_230_000 - 300_000 - 89_000)
         #expect(s.spentFromExtra == 44_000)
         #expect(s.remaining == s.extraBalance - 44_000)
-        #expect(s.spent == 44_000 + 51_000 + 300_000 + 89_000)
+        #expect(s.spent == 44_000 + 51_000)
+        #expect(s.commitmentsUnpaid == 300_000 + 89_000)
 
         let compras = snap.fundReports(asOf: DayDate(year: 2026, month: 11, day: 30), month: f.nov).first { $0.fund.id == f.compras.id }!
         #expect(compras.contributedInMonth == 300_000)
