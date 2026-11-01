@@ -494,7 +494,7 @@ extension Int64 {
 
 enum Theme {
     /// Acento elegido en Ajustes. La app lo fija al arrancar y al cambiarlo.
-    nonisolated(unsafe) static var current: AccentChoice = .teal
+    nonisolated(unsafe) static var current: AccentChoice = .slate
     static var accent: Color { current.accent }
     /// Tinte del vidrio del hero y las tarjetas de detalle.
     static var heroTint: Color { current.heroTint }

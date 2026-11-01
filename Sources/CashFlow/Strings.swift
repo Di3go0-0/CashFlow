@@ -15,11 +15,11 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
-        "Teal": "Verde azulado",
-        "Indigo": "Índigo",
-        "Blue": "Azul",
-        "Graphite": "Grafito",
-        "Coral": "Coral",
+        "Slate": "Pizarra",
+        "Navy": "Azul marino",
+        "Forest": "Bosque",
+        "Charcoal": "Carbón",
+        "Wine": "Vino",
         "Accent color": "Color de acento",
         "%@. Changes the glass, the hero card and the background glow.": "%@. Cambia el vidrio, la tarjeta principal y el brillo del fondo.",
         "Available %@ of %@": "Disponible %@ de %@",
@@ -422,11 +422,11 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
-        "Teal": "Sarcelle",
-        "Indigo": "Indigo",
-        "Blue": "Bleu",
-        "Graphite": "Graphite",
-        "Coral": "Corail",
+        "Slate": "Ardoise",
+        "Navy": "Marine",
+        "Forest": "Forêt",
+        "Charcoal": "Anthracite",
+        "Wine": "Bordeaux",
         "Accent color": "Couleur d'accent",
         "%@. Changes the glass, the hero card and the background glow.": "%@. Change le verre, la carte principale et la lueur du fond.",
         "Available %@ of %@": "Disponible %@ sur %@",

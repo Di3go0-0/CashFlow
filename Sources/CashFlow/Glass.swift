@@ -5,69 +5,79 @@ import CashFlowCore
 // Piel iOS 26: Liquid Glass en la capa de navegación (barra, botones flotantes, hero, accesorio inferior)
 // y un fondo "aurora" con profundidad detrás de las listas. El contenido sigue siendo lista nativa.
 
-/// Acento de la app. Cambia el tinte, el hero y la aurora de una vez. Se elige en Ajustes.
+/// Acento de la app. Paleta sobria: tonos apagados que no cansan. Cambia el tinte, el hero y la aurora de una vez.
 enum AccentChoice: String, CaseIterable, Identifiable, Sendable {
-    case teal, indigo, blue, graphite, coral
+    case slate, navy, forest, charcoal, wine
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .teal: T("Teal")
-        case .indigo: T("Indigo")
-        case .blue: T("Blue")
-        case .graphite: T("Graphite")
-        case .coral: T("Coral")
+        case .slate: T("Slate")
+        case .navy: T("Navy")
+        case .forest: T("Forest")
+        case .charcoal: T("Charcoal")
+        case .wine: T("Wine")
         }
     }
 
-    /// Tono base (0–1) y saturación del acento.
+    /// Tono base (0–1) para la aurora.
     private var hue: Double {
         switch self {
-        case .teal: 0.47
-        case .indigo: 0.72
-        case .blue: 0.60
-        case .graphite: 0.62
-        case .coral: 0.02
+        case .slate: 0.60
+        case .navy: 0.63
+        case .forest: 0.42
+        case .charcoal: 0.08
+        case .wine: 0.96
+        }
+    }
+
+    /// Qué tan teñida va la aurora: casi nada en los neutros.
+    private var glow: Double {
+        switch self {
+        case .slate: 0.5
+        case .navy: 0.8
+        case .forest: 0.7
+        case .charcoal: 0.2
+        case .wine: 0.6
         }
     }
 
     var accent: Color {
         switch self {
-        case .teal: Color(hex: 0x0d9488)
-        case .indigo: Color(hex: 0x5b5bd6)
-        case .blue: Color(hex: 0x2a78d6)
-        case .graphite: Color(hex: 0x4b5563)
-        case .coral: Color(hex: 0xe0583e)
+        case .slate: Color(hex: 0x4a5a73)
+        case .navy: Color(hex: 0x2b4c7e)
+        case .forest: Color(hex: 0x2f5d50)
+        case .charcoal: Color(hex: 0x3d3d44)
+        case .wine: Color(hex: 0x6e3b4b)
         }
     }
 
     /// Tinte del vidrio del hero: el acento más profundo, para texto blanco.
     var heroTint: Color {
         switch self {
-        case .teal: Color(hex: 0x0f766e).opacity(0.92)
-        case .indigo: Color(hex: 0x4338ca).opacity(0.92)
-        case .blue: Color(hex: 0x1d4ed8).opacity(0.92)
-        case .graphite: Color(hex: 0x1f2937).opacity(0.94)
-        case .coral: Color(hex: 0xb91c1c).opacity(0.88)
+        case .slate: Color(hex: 0x1f2a3d).opacity(0.94)
+        case .navy: Color(hex: 0x17305a).opacity(0.94)
+        case .forest: Color(hex: 0x1b3d33).opacity(0.94)
+        case .charcoal: Color(hex: 0x1c1c21).opacity(0.95)
+        case .wine: Color(hex: 0x4a2531).opacity(0.94)
         }
     }
 
-    /// Nueve colores para el mesh: el tono base, uno vecino y uno frío, muy claros o muy oscuros.
+    /// Nueve colores para el mesh, muy poco saturados: el fondo acompaña, no protagoniza.
     func aurora(dark: Bool) -> [Color] {
-        let neutral = self == .graphite
-        let h0 = hue, h1 = (hue + 0.08).truncatingRemainder(dividingBy: 1), h2 = (hue + 0.9).truncatingRemainder(dividingBy: 1)
+        let h0 = hue, h1 = (hue + 0.06).truncatingRemainder(dividingBy: 1), h2 = (hue + 0.92).truncatingRemainder(dividingBy: 1)
         func c(_ h: Double, _ s: Double, _ b: Double) -> Color {
-            Color(hue: h, saturation: neutral ? s * 0.25 : s, brightness: b)
+            Color(hue: h, saturation: s * glow, brightness: b)
         }
         if dark {
-            return [c(h0, 0.45, 0.09), c(h0, 0.50, 0.16), c(h2, 0.45, 0.12),
-                    c(h0, 0.48, 0.14), c(h1, 0.55, 0.24), c(h2, 0.45, 0.17),
-                    c(h0, 0.35, 0.07), c(h0, 0.45, 0.14), c(h0, 0.45, 0.09)]
+            return [c(h0, 0.30, 0.07), c(h0, 0.32, 0.11), c(h2, 0.28, 0.09),
+                    c(h0, 0.30, 0.10), c(h1, 0.34, 0.15), c(h2, 0.28, 0.12),
+                    c(h0, 0.25, 0.06), c(h0, 0.30, 0.10), c(h0, 0.30, 0.07)]
         }
-        return [c(h0, 0.14, 0.96), c(h0, 0.20, 0.94), c(h2, 0.10, 0.97),
-                c(h0, 0.08, 0.98), c(h1, 0.24, 0.92), c(h2, 0.12, 0.96),
-                c(h0, 0.04, 0.98), c(h0, 0.16, 0.95), c(h2, 0.08, 0.97)]
+        return [c(h0, 0.10, 0.96), c(h0, 0.13, 0.94), c(h2, 0.08, 0.97),
+                c(h0, 0.06, 0.98), c(h1, 0.15, 0.93), c(h2, 0.09, 0.96),
+                c(h0, 0.03, 0.98), c(h0, 0.11, 0.95), c(h2, 0.06, 0.97)]
     }
 }
 
