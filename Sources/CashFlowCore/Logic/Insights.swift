@@ -30,8 +30,8 @@ public extension Snapshot {
                 dict[key] = ConceptTotal(name: trimmed.prefix(1).uppercased() + trimmed.dropFirst(), total: amount, count: 1)
             }
         }
-        for e in expenses where month.contains(e.date) { add(e.reason, e.amountCOP) }
-        for e in cardExpenses where month.contains(e.date) { add(e.reason, e.amountCOP) }
+        for e in expenses where e.month == month { add(e.reason, e.amountCOP) }
+        for e in cardExpenses where e.month == month { add(e.reason, e.amountCOP) }
         return dict.values.sorted { $0.total == $1.total ? $0.name < $1.name : $0.total > $1.total }
     }
 
@@ -66,13 +66,13 @@ public enum CSVExport {
         }
         var lines = ["date,type,card,reason,amount_cop,currency,amount,rate,source,paid"]
         var rows: [(DayDate, [String])] = []
-        for e in snapshot.expenses where month.contains(e.date) {
+        for e in snapshot.expenses where e.month == month {
             rows.append((e.date, [e.date.key, "transfer", "", e.reason, String(e.amountCOP), e.currency.rawValue,
                                   MoneyFormat.plain(minor: e.amount, currency: e.currency), e.rate.map { String(format: "%.2f", $0) } ?? "",
                                   snapshot.expenseSourceName(e), "yes"]))
         }
         let allocs = Dictionary(grouping: snapshot.allocations, by: \.cardExpenseId)
-        for e in snapshot.cardExpenses where month.contains(e.date) {
+        for e in snapshot.cardExpenses where e.month == month {
             let sources = (allocs[e.id!] ?? []).map { "\(snapshot.allocationSourceName($0)) \($0.amount)" }.joined(separator: " | ")
             rows.append((e.date, [e.date.key, "card", snapshot.card(e.cardId)?.name ?? "", e.reason, String(e.amountCOP), e.currency.rawValue,
                                   MoneyFormat.plain(minor: e.amount, currency: e.currency), e.rate.map { String(format: "%.2f", $0) } ?? "",

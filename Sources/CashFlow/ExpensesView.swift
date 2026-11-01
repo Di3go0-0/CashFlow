@@ -24,13 +24,13 @@ struct ExpensesView: View {
     }
 
     private var monthExpenses: [Expense] {
-        model.snapshot.expenses.filter { model.month.contains($0.date) && matches($0.reason) }
+        model.snapshot.expenses.filter { $0.month == model.month && matches($0.reason) }
     }
 
     private func monthCardExpenses(_ cardId: Int64) -> [CardExpenseStatus] {
         let allocByExpense = Dictionary(grouping: model.snapshot.allocations, by: \.cardExpenseId)
         return model.snapshot.cardExpenses
-            .filter { $0.cardId == cardId && model.month.contains($0.date) && matches($0.reason) }
+            .filter { $0.cardId == cardId && $0.month == model.month && matches($0.reason) }
             .map { CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? []) }
     }
 
@@ -218,6 +218,9 @@ struct ExpenseRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(expense.reason.isEmpty ? T("No description") : expense.reason)
                 Text("\(expense.date.shortDisplay) · \(model.snapshot.expenseSourceName(expense))").font(.caption).foregroundStyle(.secondary)
+                if let bm = expense.budgetMonth, bm != expense.date.yearMonth {
+                    Label(T("Counts for %@", bm.displayName), systemImage: "calendar.badge.clock").font(.caption2).foregroundStyle(Theme.accent)
+                }
             }
             Spacer()
             VStack(alignment: .trailing) {
@@ -284,6 +287,7 @@ struct ExpenseEditView: View {
                 Section {
                     TextField(T("Reason"), text: $expense.reason)
                     DayDatePicker(title: T("Date"), day: $expense.date)
+                    BudgetMonthPicker(date: expense.date, budgetMonth: $expense.budgetMonth)
                     SourcePicker(source: $source, currentConsumableId: expense.consumableId, currentCommitmentId: expense.commitmentId)
                         .onChange(of: source) { _, new in
                             expense.fundId = new.fundId

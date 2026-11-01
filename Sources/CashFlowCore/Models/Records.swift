@@ -559,11 +559,14 @@ public struct Expense: Codable, Identifiable, Hashable, Sendable, FetchableRecor
     public var consumableId: Int64?
     /// Compromiso (deuda o gasto necesario) que paga este gasto. Sale de la plata ya apartada para él.
     public var commitmentId: Int64?
+    /// Mes al que pertenece si no es el de la fecha (mercado del 29 pagado con el sueldo del mes siguiente).
+    public var budgetMonth: YearMonth?
 
     public init(id: Int64? = nil, date: DayDate, amount: Int64, currency: Currency, rate: Double? = nil,
                 reason: String, fundId: Int64?, note: String = "", fromConsumables: Bool = false, consumableId: Int64? = nil,
-                commitmentId: Int64? = nil) {
+                commitmentId: Int64? = nil, budgetMonth: YearMonth? = nil) {
         self.id = id
+        self.budgetMonth = budgetMonth
         self.date = date
         self.amount = amount
         self.currency = currency
@@ -578,6 +581,8 @@ public struct Expense: Codable, Identifiable, Hashable, Sendable, FetchableRecor
     }
 
     public var isFromExtra: Bool { fundId == nil && !fromConsumables && commitmentId == nil }
+    /// Mes en que cuenta este gasto.
+    public var month: YearMonth { budgetMonth ?? date.yearMonth }
 
     /// Recalcula `amountCOP` y limpia la tasa si la moneda es COP. Llamar antes de guardar tras editar.
     public mutating func recomputeCOP() {
@@ -606,10 +611,14 @@ public struct CardExpense: Codable, Identifiable, Hashable, Sendable, FetchableR
     public var installmentPlanId: Int64?
     /// Cuota de manejo generada por la app en el corte.
     public var isFee: Bool
+    /// Mes al que pertenece si no es el de la fecha.
+    public var budgetMonth: YearMonth?
 
     public init(id: Int64? = nil, cardId: Int64, date: DayDate, amount: Int64, currency: Currency, rate: Double? = nil,
-                reason: String, isPaid: Bool = false, note: String = "", installmentPlanId: Int64? = nil, isFee: Bool = false) {
+                reason: String, isPaid: Bool = false, note: String = "", installmentPlanId: Int64? = nil, isFee: Bool = false,
+                budgetMonth: YearMonth? = nil) {
         self.id = id
+        self.budgetMonth = budgetMonth
         self.cardId = cardId
         self.date = date
         self.amount = amount
@@ -623,7 +632,7 @@ public struct CardExpense: Codable, Identifiable, Hashable, Sendable, FetchableR
         self.isFee = isFee
     }
 
-    enum CodingKeys: String, CodingKey { case id, cardId, date, amount, currency, rate, amountCOP, reason, isPaid, note, installmentPlanId, isFee }
+    enum CodingKeys: String, CodingKey { case id, cardId, date, amount, currency, rate, amountCOP, reason, isPaid, note, installmentPlanId, isFee, budgetMonth }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -639,10 +648,13 @@ public struct CardExpense: Codable, Identifiable, Hashable, Sendable, FetchableR
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         installmentPlanId = try c.decodeIfPresent(Int64.self, forKey: .installmentPlanId)
         isFee = try c.decodeIfPresent(Bool.self, forKey: .isFee) ?? false
+        budgetMonth = try c.decodeIfPresent(YearMonth.self, forKey: .budgetMonth)
     }
 
     /// Generado por la app (cuota de plan o cuota de manejo): no se edita el monto a mano.
     public var isGenerated: Bool { installmentPlanId != nil || isFee }
+    /// Mes en que cuenta este gasto.
+    public var month: YearMonth { budgetMonth ?? date.yearMonth }
 
     public mutating func recomputeCOP() {
         if currency == .cop { rate = nil }

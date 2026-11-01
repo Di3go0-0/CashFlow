@@ -83,6 +83,12 @@ public struct Snapshot: Sendable {
     public func commitment(_ id: Int64?) -> Commitment? { id.flatMap { i in commitments.first { $0.id == i } } }
 
     /// Lo pagado contra un compromiso: gastos y abonos ligados a él.
+    /// Abonos que cuentan en un mes: los de gastos de tarjeta que pertenecen a ese mes.
+    public func allocations(in month: YearMonth) -> [CardAllocation] {
+        let ids = Set(cardExpenses.filter { $0.month == month }.compactMap(\.id))
+        return allocations.filter { ids.contains($0.cardExpenseId) }
+    }
+
     public func paid(toward commitmentId: Int64) -> Int64 {
         expenses.filter { $0.commitmentId == commitmentId }.reduce(0) { $0 + $1.amountCOP }
             + allocations.filter { $0.commitmentId == commitmentId }.reduce(0) { $0 + $1.amount }
@@ -272,9 +278,9 @@ public extension Snapshot {
         let realItems = cons.filter { !$0.isAdjustment }
         let consPaid = realItems.filter(\.isPaid).reduce(0) { $0 + $1.amount }
         let consUnpaid = realItems.filter { !$0.isPaid }.reduce(0) { $0 + $1.amount }
-        let ex = expenses.filter { month.contains($0.date) }
-        let cex = cardExpenses.filter { month.contains($0.date) }
-        let monthAllocs = allocations.filter { month.contains($0.date) }
+        let ex = expenses.filter { $0.month == month }
+        let cex = cardExpenses.filter { $0.month == month }
+        let monthAllocs = allocations(in: month)
         // Un ítem pagado con un gasto o abono ligado ya está contado ahí; los demás pagados cuentan por su valor.
         let linked = Set(allocations.compactMap(\.consumableId) + expenses.compactMap(\.consumableId))
         let consPaidDirect = realItems.filter { $0.isPaid && !linked.contains($0.id!) }.reduce(0) { $0 + $1.amount }

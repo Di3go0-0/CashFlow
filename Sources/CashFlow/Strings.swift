@@ -15,6 +15,11 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Counts for %@": "Cuenta para %@",
+        "Counts for": "Cuenta para",
+        "%@ (month of the date)": "%@ (mes de la fecha)",
+        "%@ (next month)": "%@ (mes siguiente)",
+        "%@ (previous month)": "%@ (mes anterior)",
         "An installment purchase adds its installment to each month's plan while it is active. On a credit card it is also charged on each closing day and uses up limit until billed.": "Una compra a cuotas agrega su cuota al plan de cada mes mientras esté vigente. En una tarjeta de crédito además se carga en cada corte y ocupa cupo hasta facturarse.",
         "Balances update the moment you record a payment. Top-ups add, payments subtract.": "Los saldos se actualizan apenas registras un pago. Los abonos suman, los pagos restan.",
         "Charged": "Cargado",
@@ -356,6 +361,11 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Counts for %@": "Compte pour %@",
+        "Counts for": "Compte pour",
+        "%@ (month of the date)": "%@ (mois de la date)",
+        "%@ (next month)": "%@ (mois suivant)",
+        "%@ (previous month)": "%@ (mois précédent)",
         "An installment purchase adds its installment to each month's plan while it is active. On a credit card it is also charged on each closing day and uses up limit until billed.": "Un achat à crédit ajoute sa mensualité au plan de chaque mois tant qu'il est actif. Sur une carte de crédit, elle est aussi débitée à chaque clôture et consomme du plafond jusqu'à facturation.",
         "Balances update the moment you record a payment. Top-ups add, payments subtract.": "Les soldes se mettent à jour dès qu'un paiement est enregistré. Les provisions ajoutent, les paiements retirent.",
         "Charged": "Débité",

@@ -270,6 +270,9 @@ struct CardExpenseRow: View {
                 Text(e.reason.isEmpty ? T("No description") : e.reason)
                 HStack(spacing: 6) {
                     Text(e.date.shortDisplay)
+                    if let bm = e.budgetMonth, bm != e.date.yearMonth {
+                        Label(T("Counts for %@", bm.displayName), systemImage: "calendar.badge.clock").foregroundStyle(Theme.accent)
+                    }
                     if e.isPaid {
                         Label(T("Paid"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                     } else if status.uncovered == 0 {
@@ -346,6 +349,7 @@ struct CardExpenseEditView: View {
                 Section {
                     TextField(T("Reason"), text: $expense.reason)
                     DayDatePicker(title: T("Date"), day: $expense.date)
+                    BudgetMonthPicker(date: expense.date, budgetMonth: $expense.budgetMonth)
                     Toggle(T("Already paid to the card"), isOn: $expense.isPaid)
                 } footer: {
                     if let card = model.snapshot.card(expense.cardId) {

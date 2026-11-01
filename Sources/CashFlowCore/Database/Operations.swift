@@ -197,10 +197,10 @@ public extension AppDatabase {
             let sameMonth = snap.commitments.filter { $0.kind != .adjustment && snap.projection(for: month)?.id == $0.projectionId }
             let nextMonth = snap.commitments.filter { $0.kind != .adjustment && snap.projection(for: month.next)?.id == $0.projectionId }
             let expenseById = Dictionary(uniqueKeysWithValues: snap.cardExpenses.map { ($0.id!, $0) })
-            var movements: [Movement] = snap.allocations.filter { $0.isFromExtra && month.contains($0.date) }.compactMap { a in
+            var movements: [Movement] = snap.allocations(in: month).filter(\.isFromExtra).compactMap { a in
                 expenseById[a.cardExpenseId].map { Movement(reason: $0.reason, amount: $0.amountCOP, allocation: a, expense: nil) }
             }
-            movements += snap.expenses.filter { $0.isFromExtra && month.contains($0.date) }.map { Movement(reason: $0.reason, amount: $0.amountCOP, allocation: nil, expense: $0) }
+            movements += snap.expenses.filter { $0.isFromExtra && $0.month == month }.map { Movement(reason: $0.reason, amount: $0.amountCOP, allocation: nil, expense: $0) }
 
             func link(_ m: Movement, _ c: Commitment) throws {
                 used.insert(c.id!)

@@ -299,6 +299,10 @@ public final class AppDatabase: Sendable {
                 t.add(column: "isFee", .boolean).notNull().defaults(to: false)
             }
         }
+        m.registerMigration("v9") { db in
+            try db.alter(table: "expense") { t in t.add(column: "budgetMonth", .text).indexed() }
+            try db.alter(table: "cardExpense") { t in t.add(column: "budgetMonth", .text).indexed() }
+        }
         return m
     }
 }

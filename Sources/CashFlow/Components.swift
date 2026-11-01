@@ -192,6 +192,24 @@ struct MonthJumpSheet: View {
     }
 }
 
+/// A qué mes pertenece un gasto: el de la fecha, el siguiente (pagado con el sueldo que entra a fin de mes) o el anterior.
+struct BudgetMonthPicker: View {
+    var date: DayDate
+    @Binding var budgetMonth: YearMonth?
+
+    var body: some View {
+        let own = date.yearMonth
+        Picker(T("Counts for"), selection: Binding(
+            get: { budgetMonth == own ? nil : budgetMonth },
+            set: { budgetMonth = ($0 == own) ? nil : $0 })
+        ) {
+            Text(T("%@ (month of the date)", own.displayName)).tag(YearMonth?.none)
+            Text(T("%@ (next month)", own.next.displayName)).tag(YearMonth?.some(own.next))
+            Text(T("%@ (previous month)", own.previous.displayName)).tag(YearMonth?.some(own.previous))
+        }
+    }
+}
+
 /// Botón del ojo: oculta los montos y deja solo porcentajes.
 struct HideAmountsButton: View {
     @Environment(AppModel.self) private var model

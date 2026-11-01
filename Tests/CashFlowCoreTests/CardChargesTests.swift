@@ -134,4 +134,27 @@ import GRDB
         let e = try JSONDecoder().decode(CardExpense.self, from: Data(#"{"cardId":1,"date":"2026-10-01","amount":5,"currency":"COP","amountCOP":5,"reason":"r","isPaid":false,"note":""}"#.utf8))
         #expect(!e.isFee && e.installmentPlanId == nil)
     }
+
+    @Test func budgetMonthMovesAnExpenseToAnotherMonth() throws {
+        let f = try Fixture()
+        let oct = YearMonth(year: 2026, month: 10)
+        try f.db.startMonth(oct)
+        try f.db.startMonth(f.nov)
+        let d = DayDate(year: 2026, month: 10, day: 29)
+        // Mercado del 29 de octubre pagado con el sueldo de noviembre, sin tarjeta y con tarjeta.
+        try f.db.saveExpense(Expense(date: d, amount: 50_000, currency: .cop, reason: "Market", fundId: nil, budgetMonth: f.nov))
+        let ce = try f.db.write { db -> CardExpense in
+            var e = CardExpense(cardId: f.unica.id!, date: d, amount: 30_000, currency: .cop, reason: "Gas", budgetMonth: f.nov)
+            try e.insert(db)
+            return e
+        }
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: ce.id!, fundId: nil, amount: 30_000, date: d))
+        let snap = try f.db.snapshot()
+        let o = snap.monthSummary(oct), n = snap.monthSummary(f.nov)
+        #expect(o.spent == 0 && o.spentFromExtra == 0)
+        #expect(n.spent == 80_000 && n.spentFromExtra == 80_000)
+        #expect(snap.conceptTotals(for: f.nov).map(\.name).sorted() == ["Gas", "Market"])
+        // La tarjeta sigue usando la fecha real para el ciclo.
+        #expect(snap.cardStatus(f.unica, asOf: d).cycleTotal == 30_000)
+    }
 }
