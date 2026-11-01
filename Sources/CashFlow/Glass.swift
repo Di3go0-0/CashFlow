@@ -74,12 +74,15 @@ struct GlassStatCard: View {
     var caption: String? = nil
     var stats: [(String, Int64)] = []
     var negativeIsBad = true
+    /// Bases para el modo discreto: la cifra grande y las pequeñas.
+    var percentOf: Int64? = nil
+    var statsPercentOf: Int64? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.caption).foregroundStyle(.secondary)
-                Text(MoneyFormat.cop(value))
+                Text(MoneyFormat.hidden && percentOf != nil ? Pct.string(value, of: percentOf!) : MoneyFormat.cop(value))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -93,7 +96,8 @@ struct GlassStatCard: View {
                     ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(s.0).font(.caption2).foregroundStyle(.secondary)
-                            Text(compactCOP(s.1)).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).monospacedDigit()
+                            Text(MoneyFormat.hidden && statsPercentOf != nil ? Pct.string(s.1, of: statsPercentOf!) : compactCOP(s.1))
+                                .font(.subheadline.weight(.semibold)).foregroundStyle(.primary).monospacedDigit()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -196,9 +200,8 @@ struct MonthStrip: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 0) {
-                    Text(MoneyFormat.cop(s.remaining))
+                    MoneyText(amount: s.remaining, percentOf: s.income)
                         .font(.subheadline.weight(.semibold))
-                        .monospacedDigit()
                         .foregroundStyle(s.remaining < 0 ? .red : .primary)
                         .contentTransition(.numericText())
                     if !compact {

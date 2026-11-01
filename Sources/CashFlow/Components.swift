@@ -2,14 +2,34 @@
 import SwiftUI
 import CashFlowCore
 
+/// Porcentajes para el modo discreto: con los montos ocultos, cada cifra se muestra como parte de su base.
+enum Pct {
+    static func string(_ amount: Int64, of base: Int64) -> String {
+        guard base > 0 else { return MoneyFormat.mask }
+        if amount == 0 { return "0%" }
+        let p = Double(amount) / Double(base) * 100
+        if Swift.abs(p) < 1 { return p < 0 ? ">-1%" : "<1%" }
+        if Swift.abs(p) < 10 { return String(format: "%.1f%%", p).replacingOccurrences(of: ".0%", with: "%") }
+        return "\(Int(p.rounded()))%"
+    }
+}
+
 struct MoneyText: View {
     var amount: Int64
     var currency: Currency = .cop
     var showSign = false
+    /// Base del porcentaje en modo discreto (ingreso del mes, total de fondos, cupo…). Sin base se enmascara.
+    var percentOf: Int64? = nil
 
     var body: some View {
-        Text(MoneyFormat.amount(minor: amount, currency: currency, showSign: showSign))
-            .monospacedDigit()
+        Group {
+            if MoneyFormat.hidden, let base = percentOf {
+                Text(Pct.string(amount, of: base))
+            } else {
+                Text(MoneyFormat.amount(minor: amount, currency: currency, showSign: showSign))
+            }
+        }
+        .monospacedDigit()
     }
 }
 
@@ -21,10 +41,11 @@ struct MoneyRow: View {
     var emphasis = false
     var color: Color?
     var subtitle: String?
+    var percentOf: Int64? = nil
 
     var body: some View {
         LabeledContent {
-            MoneyText(amount: amount, currency: currency, showSign: showSign)
+            MoneyText(amount: amount, currency: currency, showSign: showSign, percentOf: percentOf)
                 .fontWeight(emphasis ? .semibold : .regular)
                 .foregroundStyle(color ?? .primary)
         } label: {

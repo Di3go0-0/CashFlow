@@ -167,6 +167,11 @@ final class AppModel {
     var reconciliationDate: DayDate { max(today, month.firstDay) }
     var fundReports: [FundReport] { snapshot.fundReports(asOf: fundsAsOf, month: month) }
     var regularFundReports: [FundReport] { fundReports.filter { !$0.fund.isCardPocket } }
+    /// Bases del modo discreto.
+    var totalFundBalance: Int64 { regularFundReports.reduce(0) { $0 + max($1.balance, 0) } }
+    var totalPocketBalance: Int64 { fundReports.filter { $0.fund.isCardPocket }.reduce(0) { $0 + max($1.balance, 0) } }
+    /// Ingreso del mes elegido; si aún no hay, lo gastado, para que los porcentajes signifiquen algo.
+    var percentBase: Int64 { summary.income > 0 ? summary.income : summary.spent }
     var cardStatuses: [CardStatus] { snapshot.cardStatuses(asOf: today) }
     var projection: Projection? { snapshot.projection(for: month) }
     var previousProjection: Projection? { snapshot.projection(for: month.previous) }

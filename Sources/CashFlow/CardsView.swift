@@ -148,7 +148,9 @@ struct CardDetailView: View {
                         stats: [(T("Payment pocket"), st.pocket.map { model.snapshot.balance(of: $0.id!, asOf: model.fundsAsOf) } ?? st.pocketBalance),
                                 (T("Due"), st.dueNow),
                                 (T("Closes in %d d", max(model.today.days(until: st.cycle.end), 0)), st.cycleTotal)],
-                        negativeIsBad: false
+                        negativeIsBad: false,
+                        percentOf: st.card.creditLimit,
+                        statsPercentOf: st.debt > 0 ? st.debt : st.card.creditLimit
                     )
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -333,7 +335,7 @@ struct CardExpenseRow: View {
             }
             Spacer()
             VStack(alignment: .trailing) {
-                MoneyText(amount: e.amountCOP)
+                MoneyText(amount: e.amountCOP, percentOf: model.percentBase)
                 if e.currency == .usd {
                     Text(MoneyFormat.usd(cents: e.amount)).font(.caption).foregroundStyle(.secondary)
                 }

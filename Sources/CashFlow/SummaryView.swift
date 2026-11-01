@@ -74,24 +74,25 @@ struct SummaryView: View {
             if s.pendingIncome > 0 || s.commitmentsUnpaid > 0 || s.consumablesTotal > 0 {
                 Section(T("Still to settle")) {
                     if s.pendingIncome > 0 {
-                        MoneyRow(title: T("Income still to come"), amount: s.pendingIncome, color: .secondary)
+                        MoneyRow(title: T("Income still to come"), amount: s.pendingIncome, color: .secondary, percentOf: s.income + s.pendingIncome)
                     }
                     if s.commitmentsUnpaid > 0 {
                         MoneyRow(title: T("To pay this month"), amount: s.commitmentsUnpaid, color: .secondary,
-                                 subtitle: T("Debts and necessary expenses without a payment yet"))
+                                 subtitle: T("Debts and necessary expenses without a payment yet"), percentOf: s.income)
                     }
                     if s.consumablesTotal > 0 {
                         MoneyRow(title: T("Pending consumables"), amount: s.consumablesUnpaid,
                                  color: s.consumablesPending < 0 ? .red : .primary,
-                                 subtitle: T("Pool %@ · left in it %@", MoneyFormat.cop(s.consumablesTotal), MoneyFormat.cop(s.consumablesPending)))
+                                 subtitle: T("Pool %@ · left in it %@", MoneyFormat.cop(s.consumablesTotal), MoneyFormat.cop(s.consumablesPending)),
+                                 percentOf: s.income)
                     }
                 }
             }
 
             Section(T("Free to spend")) {
-                MoneyRow(title: T("Free to spend"), amount: s.extraBalance, subtitle: T("Income minus funds, consumables, debts and necessary"))
-                MoneyRow(title: T("Already spent from it"), amount: s.spentFromExtra)
-                MoneyRow(title: T("Remaining"), amount: s.remaining, emphasis: true, color: s.remaining < 0 ? .red : .primary)
+                MoneyRow(title: T("Free to spend"), amount: s.extraBalance, subtitle: T("Income minus funds, consumables, debts and necessary"), percentOf: s.income)
+                MoneyRow(title: T("Already spent from it"), amount: s.spentFromExtra, percentOf: s.income)
+                MoneyRow(title: T("Remaining"), amount: s.remaining, emphasis: true, color: s.remaining < 0 ? .red : .primary, percentOf: s.income)
                 if let projected = model.projectedRemaining {
                     MoneyRow(title: T("At this pace, month end"), amount: projected, color: projected < 0 ? .orange : .secondary,
                              subtitle: T("If spending from the extra balance continues at the current daily rate"))
@@ -202,7 +203,7 @@ struct PlanDonutChart: View {
                         Spacer()
                         Text(total > 0 ? "\(Int((Double(s.amount) / Double(total) * 100).rounded()))%" : "—")
                             .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                        MoneyText(amount: s.amount).font(.subheadline).frame(minWidth: 90, alignment: .trailing)
+                        MoneyText(amount: s.amount, percentOf: total).font(.subheadline).frame(minWidth: 90, alignment: .trailing)
                     }
                 }
             }
@@ -340,7 +341,7 @@ struct CardSummaryRow: View {
                 ColorDot(index: Int(status.card.id ?? 0), systemImage: "creditcard")
                 Text(status.card.name).font(.headline)
                 Spacer()
-                MoneyText(amount: status.debt).foregroundStyle(status.debt > 0 ? .primary : .secondary)
+                MoneyText(amount: status.debt, percentOf: status.card.creditLimit).foregroundStyle(status.debt > 0 ? .primary : .secondary)
             }
             ThinBar(fraction: status.card.creditLimit > 0 ? Double(status.card.creditLimit - status.available) / Double(status.card.creditLimit) : 0,
                     color: Theme.accent)
@@ -348,9 +349,13 @@ struct CardSummaryRow: View {
             HStack {
                 Text(T("Closes in %d d · %@", cut, status.cycle.end.shortDisplay))
                 Spacer()
-                Text(status.installmentsOutstanding > 0
-                     ? T("Avail. %@ · installments %@", MoneyFormat.cop(status.available), MoneyFormat.cop(status.installmentsOutstanding))
-                     : T("Avail. %@", MoneyFormat.cop(status.available)))
+                if MoneyFormat.hidden {
+                    Text(T("%@ of limit used", Pct.string(status.card.creditLimit - status.available, of: status.card.creditLimit)))
+                } else {
+                    Text(status.installmentsOutstanding > 0
+                         ? T("Avail. %@ · installments %@", MoneyFormat.cop(status.available), MoneyFormat.cop(status.installmentsOutstanding))
+                         : T("Avail. %@", MoneyFormat.cop(status.available)))
+                }
             }
             .font(.caption).foregroundStyle(.secondary)
             if status.dueNow > 0 {

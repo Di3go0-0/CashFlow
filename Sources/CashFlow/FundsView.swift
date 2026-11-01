@@ -80,6 +80,7 @@ struct FundsView: View {
 }
 
 struct FundRow: View {
+    @Environment(AppModel.self) private var model
     var report: FundReport
     var index: Int = 0
     var systemImage: String?
@@ -92,9 +93,15 @@ struct FundRow: View {
                 HStack {
                     Text(report.fund.name)
                     Spacer()
-                    MoneyText(amount: report.balance).foregroundStyle(report.balance.balanceColor)
+                    MoneyText(amount: report.balance, percentOf: report.fund.isCardPocket ? model.totalPocketBalance : model.totalFundBalance)
+                        .foregroundStyle(report.balance.balanceColor)
                 }
-                if report.fund.resetsMonthly {
+                if MoneyFormat.hidden {
+                    if report.contributedInMonth > 0 {
+                        Text(T("%@ of this month's income", Pct.string(report.contributedInMonth, of: model.summary.income)))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } else if report.fund.resetsMonthly {
                     ThinBar(fraction: report.contributedInMonth > 0 ? Double(report.remainingInMonth) / Double(report.contributedInMonth) : 0,
                             color: Palette.series(scheme)[index % 5])
                     Text(T("This month: %@ of %@", MoneyFormat.cop(report.remainingInMonth), MoneyFormat.cop(report.contributedInMonth)))
@@ -130,7 +137,9 @@ struct FundDetailView: View {
                         value: r.balance,
                         caption: model.fundsAsOf > model.today ? T("Today: %@", MoneyFormat.cop(model.snapshot.balance(of: fundId, asOf: model.today))) : nil,
                         stats: [(T("In"), r.contributedInMonth), (T("Out"), r.spentInMonth)]
-                            + (r.fund.resetsMonthly ? [(T("Left this month"), r.remainingInMonth)] : [])
+                            + (r.fund.resetsMonthly ? [(T("Left this month"), r.remainingInMonth)] : []),
+                        percentOf: r.fund.isCardPocket ? model.totalPocketBalance : model.totalFundBalance,
+                        statsPercentOf: model.summary.income
                     )
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)

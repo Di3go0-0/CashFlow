@@ -48,7 +48,7 @@ struct MonthView: View {
                 if !adjustments.isEmpty {
                     Section {
                         ForEach(adjustments) { c in
-                            MoneyRow(title: c.name, amount: c.amount, subtitle: c.date.longDisplay)
+                            MoneyRow(title: c.name, amount: c.amount, subtitle: c.date.longDisplay, percentOf: model.summary.income)
                         }
                         .onDelete { idx in
                             let ids = idx.map { adjustments[$0].id! }
@@ -150,7 +150,7 @@ struct MonthView: View {
                                 .font(.caption).foregroundStyle(d.income.status == .pending ? .orange : .secondary)
                         }
                         Spacer()
-                        MoneyText(amount: d.net).foregroundStyle(d.income.status == .pending ? .secondary : .primary)
+                        MoneyText(amount: d.net, percentOf: model.monthIncomes.reduce(0) { $0 + $1.net }).foregroundStyle(d.income.status == .pending ? .secondary : .primary)
                     }
                 }
                 .tint(.primary)
@@ -196,7 +196,7 @@ struct MonthView: View {
                             Text(c.date.shortDisplay).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        MoneyText(amount: c.amount)
+                        MoneyText(amount: c.amount, percentOf: model.summary.income)
                     }
                 }
                 .tint(.primary)
@@ -255,7 +255,7 @@ struct MonthView: View {
                                 }
                             }
                             Spacer()
-                            MoneyText(amount: c.amount).foregroundStyle(c.isPaid ? .secondary : .primary)
+                            MoneyText(amount: c.amount, percentOf: model.summary.income).foregroundStyle(c.isPaid ? .secondary : .primary)
                         }
                     }
                     .tint(.primary)
@@ -315,7 +315,7 @@ struct MonthView: View {
                             }
                         }
                         Spacer()
-                        MoneyText(amount: c.amount).foregroundStyle(paid >= c.amount ? .secondary : .primary)
+                        MoneyText(amount: c.amount, percentOf: model.summary.income).foregroundStyle(paid >= c.amount ? .secondary : .primary)
                     }
                 }
                 .tint(.primary)
@@ -342,14 +342,14 @@ struct MonthView: View {
     private var resultSection: some View {
         let s = model.summary
         return Section(T("Result")) {
-            MoneyRow(title: T("Income"), amount: s.income)
-            MoneyRow(title: T("Committed"), amount: -s.committed, subtitle: T("Funds, consumables, debts and necessary"))
+            MoneyRow(title: T("Income"), amount: s.income, percentOf: s.income)
+            MoneyRow(title: T("Committed"), amount: -s.committed, subtitle: T("Funds, consumables, debts and necessary"), percentOf: s.income)
             if s.commitmentsUnpaid > 0 {
-                MoneyRow(title: T("Commitments still to pay"), amount: s.commitmentsUnpaid, color: .secondary,
-                         subtitle: T("Record each payment as an expense paid from its commitment"))
+                MoneyRow(title: T("To pay this month"), amount: s.commitmentsUnpaid, color: .secondary,
+                         subtitle: T("Record each payment as an expense paid from its commitment"), percentOf: s.income)
             }
-            MoneyRow(title: T("Free to spend"), amount: s.extraBalance, emphasis: true, color: s.extraBalance < 0 ? .red : .primary)
-            MoneyRow(title: T("Remaining today"), amount: s.remaining, subtitle: T("Extra balance minus what was already spent from it"))
+            MoneyRow(title: T("Free to spend"), amount: s.extraBalance, emphasis: true, color: s.extraBalance < 0 ? .red : .primary, percentOf: s.income)
+            MoneyRow(title: T("Remaining today"), amount: s.remaining, subtitle: T("Extra balance minus what was already spent from it"), percentOf: s.income)
         }
     }
 }
@@ -517,7 +517,7 @@ struct ContributionEditView: View {
                     .id(contribution.fundId)
                 DayDatePicker(title: T("Date"), day: $contribution.date)
                 if let f = model.snapshot.fund(contribution.fundId) {
-                    MoneyRow(title: T("Fund balance today"), amount: model.snapshot.balance(of: f.id!, asOf: model.today))
+                    MoneyRow(title: T("Fund balance today"), amount: model.snapshot.balance(of: f.id!, asOf: model.today), percentOf: model.totalFundBalance)
                 }
             }
             .auroraList()

@@ -84,7 +84,7 @@ struct ExpensesView: View {
                 let total = monthExpenses.reduce(0) { $0 + $1.amountCOP }
                     + model.activeCards.flatMap { monthCardExpenses($0.id!) }.reduce(0) { $0 + $1.expense.amountCOP }
                 Section {
-                    MoneyRow(title: T("Total spent in %@", model.month.monthName), amount: total, emphasis: true)
+                    MoneyRow(title: T("Total spent in %@", model.month.monthName), amount: total, emphasis: true, percentOf: model.percentBase)
                 }
             }
         }
@@ -213,7 +213,7 @@ struct ExpensesView: View {
             HStack {
                 Label(card.name, systemImage: "creditcard")
                 Spacer()
-                Text(MoneyFormat.cop(monthCardExpenses(card.id!).reduce(0) { $0 + $1.expense.amountCOP }))
+                MoneyText(amount: monthCardExpenses(card.id!).reduce(0) { $0 + $1.expense.amountCOP }, percentOf: model.percentBase)
             }
         }
     }
@@ -234,7 +234,7 @@ struct ExpenseRow: View {
             }
             Spacer()
             VStack(alignment: .trailing) {
-                MoneyText(amount: expense.amountCOP)
+                MoneyText(amount: expense.amountCOP, percentOf: model.percentBase)
                 if expense.currency == .usd {
                     Text(MoneyFormat.usd(cents: expense.amount)).font(.caption).foregroundStyle(.secondary)
                 }
