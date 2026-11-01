@@ -38,16 +38,18 @@ struct RootView: View {
     var body: some View {
         @Bindable var model = model
         TabView(selection: tabSelection) {
-            NavigationStack { SummaryView() }
-                .tabItem { Label(T("Summary"), systemImage: "chart.pie") }.tag(0)
-            NavigationStack { MonthView() }
-                .tabItem { Label(T("Month"), systemImage: "calendar") }.tag(1)
-            NavigationStack { FundsView() }
-                .tabItem { Label(T("Funds"), systemImage: "tray.2") }.tag(2)
-            NavigationStack { CardsView() }
-                .tabItem { Label(T("Credit cards"), systemImage: "creditcard") }.tag(3)
-            NavigationStack { ExpensesView() }
-                .tabItem { Label(T("Expenses"), systemImage: "cart") }.tag(4)
+            Tab(T("Summary"), systemImage: "chart.pie.fill", value: 0) { NavigationStack { SummaryView() } }
+            Tab(T("Month"), systemImage: "calendar", value: 1) { NavigationStack { MonthView() } }
+            Tab(T("Funds"), systemImage: "tray.2.fill", value: 2) { NavigationStack { FundsView() } }
+            Tab(T("Credit cards"), systemImage: "creditcard.fill", value: 3) { NavigationStack { CardsView() } }
+            Tab(T("Expenses"), systemImage: "cart.fill", value: 4) { NavigationStack { ExpensesView() } }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory {
+            MonthStrip {
+                tab = 0
+                model.goToToday()
+            }
         }
         .id("\(model.language.rawValue)-\(model.hideAmounts)")
         .tint(Theme.accent)
@@ -70,7 +72,7 @@ struct RootView: View {
                 Label(toast, systemImage: "checkmark.circle.fill")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .glassEffect(.regular, in: .capsule)
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .task {
@@ -79,6 +81,7 @@ struct RootView: View {
                     }
             }
         }
+        .sensoryFeedback(.success, trigger: model.toast) { _, new in new != nil }
         .alert(T("Something went wrong"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }

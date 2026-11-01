@@ -15,6 +15,7 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "free to spend": "libre para gastar",
         "Once": "1 vez",
         "Edit": "Editar",
         "Covered by the pocket": "Cubierto por el bolsillo",
@@ -411,6 +412,7 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "free to spend": "libre à dépenser",
         "Once": "1 fois",
         "Edit": "Modifier",
         "Covered by the pocket": "Couvert par la poche",

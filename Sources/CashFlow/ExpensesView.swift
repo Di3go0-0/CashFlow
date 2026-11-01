@@ -88,14 +88,13 @@ struct ExpensesView: View {
                 }
             }
         }
+        .auroraList()
+        .overlay(alignment: .bottomTrailing) { FloatingAddButton() }
         .navigationTitle(T("Expenses"))
         .searchable(text: $query, prompt: T("Search by reason"))
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { exportCSV() } label: { Image(systemName: "square.and.arrow.up") }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showNew = true } label: { Image(systemName: "plus") }
             }
         }
         .sheet(item: $csvURL) { url in

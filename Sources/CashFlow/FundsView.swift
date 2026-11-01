@@ -62,6 +62,7 @@ struct FundsView: View {
                 }
             }
         }
+        .auroraList()
         .navigationTitle(T("Funds"))
         .navigationDestination(for: Int64.self) { FundDetailView(fundId: $0) }
         .toolbar {

@@ -491,6 +491,8 @@ extension Int64 {
 
 enum Theme {
     static let accent = Color(hex: 0x0d9488)
+    /// Tinte del vidrio del hero: teal profundo para que el texto blanco lea bien sobre cualquier fondo.
+    static let heroTint = Color(hex: 0x0f766e).opacity(0.92)
     static let heroGradient = LinearGradient(colors: [Color(hex: 0x0f766e), Color(hex: 0x134e4a)], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 

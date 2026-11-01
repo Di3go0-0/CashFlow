@@ -27,6 +27,8 @@ struct CardsView: View {
                 }
             }
         }
+        .auroraList()
+        .overlay(alignment: .bottomTrailing) { FloatingAddButton(preferCard: true) }
         .navigationTitle(T("Credit cards"))
         .navigationDestination(for: Int64.self) { CardDetailView(cardId: $0) }
         .toolbar {

@@ -118,17 +118,14 @@ struct SummaryView: View {
                 }
             }
         }
+        .auroraList()
+        .overlay(alignment: .bottomTrailing) { FloatingAddButton() }
         .navigationTitle(T("Summary"))
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack {
-                    HideAmountsButton()
-                    Button { showExpense = true } label: { Image(systemName: "plus") }
-                }
-            }
+            ToolbarItem(placement: .topBarTrailing) { HideAmountsButton() }
         }
         .sheet(isPresented: $showExpense) { NewExpenseSheet(initialCardId: nil) }
         .sheet(isPresented: $showSettings) { NavigationStack { SettingsView() } }
@@ -285,8 +282,9 @@ struct HeroCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(hidden ? T("Remaining, as a share of income") : T("Remaining this month")).font(.caption).foregroundStyle(.white.opacity(0.75))
                 Text(hidden ? percent(summary.remaining) : MoneyFormat.cop(summary.remaining))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
                     .foregroundStyle(summary.remaining < 0 ? Color(hex: 0xfecaca) : .white)
             }
             if let perDay = perDay {
@@ -299,9 +297,10 @@ struct HeroCard: View {
                 heroStat(T("Saved"), summary.saved)
             }
         }
-        .padding(18)
-        .background(Theme.heroGradient, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(20)
+        .glassEffect(.regular.tint(Theme.heroTint), in: .rect(cornerRadius: 28))
         .padding(.horizontal, 4)
+        .animation(.snappy, value: summary.remaining)
     }
 
     private var hidden: Bool { MoneyFormat.hidden }

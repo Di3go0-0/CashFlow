@@ -106,6 +106,8 @@ struct MonthView: View {
                 }
             }
         }
+        .auroraList()
+        .overlay(alignment: .bottomTrailing) { FloatingAddButton() }
         .navigationTitle(T("Month"))
         .toolbar { ToolbarItem(placement: .topBarTrailing) { LocalizedEditButton() } }
         .sheet(item: $payingWithCard) { PayConsumableSheet(item: $0) }
