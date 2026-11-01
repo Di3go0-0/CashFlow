@@ -364,6 +364,8 @@ public struct CardCycleReport: Hashable, Sendable {
     public var payments: [CardPayment]
     /// Saldo del bolsillo el día del último pago de este ciclo.
     public var pocketAfterPayment: Int64?
+    /// Lo que el banco cobró según el usuario, si lo escribió al pagar.
+    public var statementTotal: Int64?
     public var paid: Int64 { payments.reduce(0) { $0 + $1.amount } }
 }
 
@@ -400,9 +402,14 @@ public extension Snapshot {
         let allocByExpense = Dictionary(grouping: allocations, by: \.cardExpenseId)
         let items = cardExpenses.filter { $0.cardId == cardId && cycle.contains($0.date) }
             .map { CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? []) }
-        // Los pagos de un ciclo van desde su corte (incluido) hasta el día antes del siguiente corte.
+        // Un pago pertenece al ciclo que el usuario eligió; si no eligió, al ciclo cuyo corte quedó entre
+        // ese corte (incluido) y el día antes del siguiente.
         let nextEnd = cycle.next.end
-        let pays = payments.filter { $0.cardId == cardId && $0.date >= cycle.end && $0.date < nextEnd }.sorted { $0.date < $1.date }
+        let pays = payments.filter { p in
+            guard p.cardId == cardId else { return false }
+            if let end = p.cycleEnd { return end == cycle.end }
+            return p.date >= cycle.end && p.date < nextEnd
+        }.sorted { $0.date < $1.date }
         let pocket = pocket(of: cardId)
         let after: Int64? = pays.last.flatMap { p in pocket.map { balance(of: $0.id!, asOf: p.date) } }
         return CardCycleReport(
@@ -412,7 +419,8 @@ public extension Snapshot {
             allocated: items.reduce(0) { $0 + min($1.allocated, $1.expense.amountCOP) },
             unpaid: items.filter { !$0.expense.isPaid }.reduce(0) { $0 + $1.expense.amountCOP },
             payments: pays,
-            pocketAfterPayment: after
+            pocketAfterPayment: after,
+            statementTotal: pays.compactMap(\.statementAmount).last
         )
     }
 

@@ -106,9 +106,7 @@ struct MonthView: View {
         .confirmationDialog(T("Undo starting %@?", model.month.monthName), isPresented: $confirmDelete, titleVisibility: .visible) {
             Button(T("Undo"), role: .destructive) { model.deleteMonth() }
         }
-        .confirmationDialog(T("Finish %@?", model.month.monthName), isPresented: $confirmClose, titleVisibility: .visible) {
-            Button(T("Finish month")) { model.closeMonth() }
-        }
+        .sheet(isPresented: $confirmClose) { FinishMonthSheet() }
     }
 
     /// Botón "traer del mes anterior" para una categoría.

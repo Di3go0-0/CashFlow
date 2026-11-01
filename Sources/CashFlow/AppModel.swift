@@ -98,12 +98,16 @@ final class AppModel {
 
     func goToToday() { month = activeMonth }
 
-    /// Termina el mes elegido y, si era el mes en curso, pasa al siguiente.
-    func closeMonth() {
+    /// Termina el mes elegido tras cuadrar los saldos reales y, si era el mes en curso, pasa al siguiente.
+    func closeMonth(balances: [Int64: Int64]) {
         let m = month
-        if perform({ try db.closeMonth(m, label: T("Month close"), on: today) }) {
+        if perform({ try db.closeMonth(m, label: T("Month close"), on: today, balances: balances, reconciliationLabel: L10n.tr("Month-end reconciliation")) }) {
             month = activeMonth
         }
+    }
+
+    func setBalance(of fundId: Int64, to target: Int64) {
+        perform { try db.setBalance(of: fundId, to: target, on: today, reason: L10n.tr("Balance reconciliation")) }
     }
 
     func report(_ error: Error) {

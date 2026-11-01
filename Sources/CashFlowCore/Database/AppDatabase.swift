@@ -306,6 +306,12 @@ public final class AppDatabase: Sendable {
         m.registerMigration("v10") { db in
             try db.alter(table: "projection") { t in t.add(column: "closedAt", .text) }
         }
+        m.registerMigration("v11") { db in
+            try db.alter(table: "cardPayment") { t in
+                t.add(column: "statementAmount", .integer)
+                t.add(column: "cycleEnd", .text)
+            }
+        }
         return m
     }
 }

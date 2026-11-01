@@ -17,13 +17,14 @@ struct MoneyRow: View {
     var title: String
     var amount: Int64
     var currency: Currency = .cop
+    var showSign = false
     var emphasis = false
     var color: Color?
     var subtitle: String?
 
     var body: some View {
         LabeledContent {
-            MoneyText(amount: amount, currency: currency)
+            MoneyText(amount: amount, currency: currency, showSign: showSign)
                 .fontWeight(emphasis ? .semibold : .regular)
                 .foregroundStyle(color ?? .primary)
         } label: {
@@ -207,6 +208,96 @@ struct BudgetMonthPicker: View {
             Text(T("%@ (month of the date)", own.displayName)).tag(YearMonth?.none)
             Text(T("%@ (next month)", own.next.displayName)).tag(YearMonth?.some(own.next))
             Text(T("%@ (previous month)", own.previous.displayName)).tag(YearMonth?.some(own.previous))
+        }
+    }
+}
+
+/// Poner el saldo real de un fondo o bolsillo. La diferencia queda como movimiento manual de hoy.
+struct SetBalanceSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var fund: Fund
+    @State private var target: Int64 = 0
+
+    private var computed: Int64 { model.snapshot.balance(of: fund.id!, asOf: model.today) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    MoneyRow(title: T("Computed by the app"), amount: computed)
+                    MoneyField(title: T("Real balance"), amount: $target)
+                    let diff = target - computed
+                    MoneyRow(title: T("Adjustment"), amount: diff, showSign: true, color: diff == 0 ? .secondary : (diff > 0 ? .green : .red))
+                } footer: {
+                    Text(T("The difference is recorded today as a manual movement so the balance matches what you really have."))
+                }
+            }
+            .navigationTitle(fund.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { target = computed }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(T("Save")) {
+                        model.setBalance(of: fund.id!, to: target)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+/// Terminar el mes: primero el saldo real de cada fondo y bolsillo, luego el cierre.
+struct FinishMonthSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var targets: [Int64: Int64] = [:]
+
+    private var reports: [FundReport] { model.fundReports }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    ForEach(reports.filter { !$0.fund.isCardPocket }) { r in row(r) }
+                } header: {
+                    Text(T("Funds"))
+                } footer: {
+                    Text(T("Write what each one really has. Leave it as is if it matches."))
+                }
+                Section(T("Credit card payment pockets")) {
+                    ForEach(reports.filter { $0.fund.isCardPocket }) { r in row(r) }
+                }
+                Section {
+                    Button {
+                        model.closeMonth(balances: targets)
+                        dismiss()
+                    } label: {
+                        Label(T("Finish %@", model.month.monthName), systemImage: "lock")
+                    }
+                } footer: {
+                    Text(T("Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. If this is the current month, the app moves on to %@.", model.month.next.monthName))
+                }
+            }
+            .navigationTitle(T("Finish %@", model.month.monthName))
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { for r in reports { targets[r.fund.id!] = r.balance } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } } }
+        }
+    }
+
+    private func row(_ r: FundReport) -> some View {
+        let id = r.fund.id!
+        let diff = (targets[id] ?? r.balance) - r.balance
+        return VStack(alignment: .leading, spacing: 2) {
+            MoneyField(title: r.fund.name, amount: Binding(get: { targets[id] ?? r.balance }, set: { targets[id] = $0 }))
+            if diff != 0 {
+                Text(T("App: %@ · adjustment %@", MoneyFormat.cop(r.balance), MoneyFormat.cop(diff, showSign: true)))
+                    .font(.caption).foregroundStyle(diff > 0 ? .green : .red)
+            }
         }
     }
 }

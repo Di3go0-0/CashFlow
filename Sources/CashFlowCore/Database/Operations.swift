@@ -185,6 +185,21 @@ public extension AppDatabase {
         }
     }
 
+    /// Deja un fondo o bolsillo en el saldo real que dice el usuario: la diferencia queda como movimiento manual.
+    func setBalance(of fundId: Int64, to target: Int64, on date: DayDate, reason: String) throws {
+        let actual = try snapshot().balance(of: fundId, asOf: date)
+        let diff = target - actual
+        if diff != 0 { try adjustFund(fundId, amount: diff, date: date, reason: reason) }
+    }
+
+    /// Cuadra los fondos y bolsillos con los saldos reales y termina el mes.
+    func closeMonth(_ month: YearMonth, label: String, on date: DayDate, balances: [Int64: Int64], reconciliationLabel: String) throws {
+        for (fundId, target) in balances.sorted(by: { $0.key < $1.key }) {
+            try setBalance(of: fundId, to: target, on: date, reason: reconciliationLabel)
+        }
+        try closeMonth(month, label: label, on: date)
+    }
+
     /// Deshace el cierre: quita los ajustes y la bandera. Los consumibles marcados pagados se quedan así.
     func reopenMonth(_ month: YearMonth) throws {
         guard var p = try snapshot().projection(for: month) else { return }

@@ -109,6 +109,7 @@ struct FundDetailView: View {
     var fundId: Int64
     @State private var editing = false
     @State private var adjusting = false
+    @State private var settingBalance = false
     @State private var flowAllTime = false
 
     private var report: FundReport? {
@@ -173,6 +174,7 @@ struct FundDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button { settingBalance = true } label: { Label(T("Set real balance"), systemImage: "equal.circle") }
                         Button { adjusting = true } label: { Label(T("Deposit or withdraw"), systemImage: "arrow.left.arrow.right") }
                         Button { editing = true } label: { Label(T("Edit fund"), systemImage: "pencil") }
                     } label: {
@@ -182,6 +184,7 @@ struct FundDetailView: View {
             }
             .sheet(isPresented: $editing) { FundEditView(fund: r.fund) }
             .sheet(isPresented: $adjusting) { FundAdjustmentView(fund: r.fund) }
+            .sheet(isPresented: $settingBalance) { SetBalanceSheet(fund: r.fund) }
         } else {
             ContentUnavailableView(T("Fund not found"), systemImage: "tray")
         }

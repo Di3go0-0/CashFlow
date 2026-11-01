@@ -713,13 +713,20 @@ public struct CardPayment: Codable, Identifiable, Hashable, Sendable, FetchableR
     public var date: DayDate
     public var amount: Int64
     public var note: String
+    /// Lo que el banco cobró en el extracto que este pago salda, tal como lo escribió el usuario.
+    public var statementAmount: Int64?
+    /// Corte del ciclo que este pago salda. Nil = se deduce por la fecha.
+    public var cycleEnd: DayDate?
 
-    public init(id: Int64? = nil, cardId: Int64, date: DayDate, amount: Int64, note: String = "") {
+    public init(id: Int64? = nil, cardId: Int64, date: DayDate, amount: Int64, note: String = "",
+                statementAmount: Int64? = nil, cycleEnd: DayDate? = nil) {
         self.id = id
         self.cardId = cardId
         self.date = date
         self.amount = amount
         self.note = note
+        self.statementAmount = statementAmount
+        self.cycleEnd = cycleEnd
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }

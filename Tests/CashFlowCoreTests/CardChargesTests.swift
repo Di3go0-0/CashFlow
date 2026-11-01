@@ -179,4 +179,33 @@ import GRDB
         #expect(snap.activeMonth(today: DayDate(year: 2026, month: 11, day: 29)) == f.nov)
         #expect(snap.commitments.filter { $0.kind == .adjustment }.isEmpty)
     }
+
+    @Test func explicitCycleAndStatementOnPaymentsAndMonthEndReconciliation() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let d = DayDate(year: 2026, month: 11, day: 3)
+        let e = try f.db.write { db -> CardExpense in
+            var e = CardExpense(cardId: f.unica.id!, date: d, amount: 100_000, currency: .cop, reason: "Market")
+            try e.insert(db)
+            return e
+        }
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: e.id!, fundId: f.compras.id, amount: 100_000, date: d))
+        let cycle = f.unica.cycle(containing: d)
+        // Pago fechado lejos del ciclo pero asignado a él, con lo que cobró el banco y el saldo real del bolsillo.
+        try f.db.payCard(CardPayment(cardId: f.unica.id!, date: DayDate(year: 2026, month: 12, day: 20), amount: 104_000,
+                                     statementAmount: 104_000, cycleEnd: cycle.end), markPaidThrough: cycle.end, pocketBalanceAfter: 24_000)
+        var snap = try f.db.snapshot()
+        let r = snap.cycleReport(card: f.unica, cycle: cycle)
+        #expect(r.paid == 104_000 && r.statementTotal == 104_000 && r.charged == 100_000)
+        #expect(r.pocketAfterPayment == Int64(24_000))
+        #expect(snap.cycleReport(card: f.unica, cycle: cycle.next).payments.isEmpty)
+
+        // Cuadre de fin de mes: Compras queda en 12.000 de verdad.
+        try f.db.closeMonth(f.nov, label: "Close", on: DayDate(year: 2026, month: 11, day: 29),
+                            balances: [f.compras.id!: 12_000, f.moto.id!: 624_000], reconciliationLabel: "Month-end")
+        snap = try f.db.snapshot()
+        #expect(snap.balance(of: f.compras.id!, asOf: DayDate(year: 2026, month: 11, day: 29)) == 12_000)
+        #expect(snap.adjustments.filter { $0.reason == "Month-end" }.count == 1)
+        #expect(snap.projection(for: f.nov)?.isClosed == true)
+    }
 }

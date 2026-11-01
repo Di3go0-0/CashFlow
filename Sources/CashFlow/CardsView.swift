@@ -109,6 +109,7 @@ struct CardDetailView: View {
     @State private var showNewExpense = false
     @State private var showPayment = false
     @State private var payingCycle: CardCycle?
+    @State private var settingPocket = false
 
     private var status: CardStatus? {
         guard let card = model.snapshot.card(cardId) else { return nil }
@@ -139,7 +140,14 @@ struct CardDetailView: View {
                         MoneyRow(title: T("Installments not yet billed"), amount: st.installmentsOutstanding,
                                  subtitle: st.plans.map { T("%@: %d of %d", $0.name, $0.installmentCount - $0.billedInstallments(through: model.month), $0.installmentCount) }.joined(separator: " · "))
                     }
-                    MoneyRow(title: T("Payment pocket"), amount: st.pocketBalance, color: st.pocketBalance < st.dueNow ? .orange : .primary)
+                    Button { settingPocket = true } label: {
+                        HStack {
+                            MoneyRow(title: T("Payment pocket"), amount: st.pocketBalance, color: st.pocketBalance < st.dueNow ? .orange : .primary,
+                                     subtitle: T("Tap to set the real balance"))
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                        }
+                    }
+                    .tint(.primary)
                     MoneyRow(title: T("Still to set aside"), amount: st.uncovered, color: st.uncovered > 0 ? .red : .secondary,
                              subtitle: T("Unpaid expenses without a full top-up"))
                     if st.dueNow > 0 {
@@ -180,7 +188,12 @@ struct CardDetailView: View {
                 let rep = model.snapshot.cycleReport(card: st.card, cycle: cyc)
                 if rep.charged > 0 || !rep.payments.isEmpty {
                     Section {
-                        MoneyRow(title: T("Charged"), amount: rep.charged)
+                        MoneyRow(title: T("Charged"), amount: rep.charged, subtitle: T("Expenses recorded in the app"))
+                        if let bank = rep.statementTotal {
+                            let gap = bank - rep.charged
+                            MoneyRow(title: T("Bank charged"), amount: bank, color: gap == 0 ? .primary : .orange,
+                                     subtitle: gap == 0 ? nil : T("%@ not matched by the app's expenses", MoneyFormat.cop(gap, showSign: true)))
+                        }
                         MoneyRow(title: T("Set aside in the pocket"), amount: rep.allocated,
                                  color: rep.allocated < rep.charged ? .orange : .primary,
                                  subtitle: rep.allocated < rep.charged ? T("Missing %@", MoneyFormat.cop(rep.charged - rep.allocated)) : nil)
@@ -208,6 +221,11 @@ struct CardDetailView: View {
                             }
                             if rep.unpaid > 0 {
                                 MoneyRow(title: T("Still unpaid"), amount: rep.unpaid, color: .orange)
+                            }
+                            Button {
+                                payingCycle = cyc
+                            } label: {
+                                Label(T("Record another payment for this cycle"), systemImage: "plus")
                             }
                         }
                     } header: {
@@ -252,6 +270,7 @@ struct CardDetailView: View {
             .sheet(isPresented: $showPayment) { CardPaymentView(status: st) }
             .sheet(item: $payingCycle) { CardPaymentView(status: st, cycleEnd: $0.end) }
             .sheet(isPresented: $editingCard) { CardEditView(card: st.card) }
+            .sheet(isPresented: $settingPocket) { if let p = st.pocket { SetBalanceSheet(fund: p) } }
         } else {
             ContentUnavailableView(T("Credit card not found"), systemImage: "creditcard")
         }
@@ -502,8 +521,9 @@ struct CardPaymentView: View {
     @State private var amount: Int64 = 0
     @State private var date: DayDate = .today()
     @State private var covers: Coverage = .previousCut
-    @State private var setPocket = false
     @State private var pocketAfter: Int64 = 0
+    @State private var statement: Int64 = 0
+    @State private var statementTouched = false
 
     enum Coverage: Hashable { case previousCut, cycle, allPending, none }
 
@@ -561,34 +581,35 @@ struct CardPaymentView: View {
                     Text(T("Covered expenses are marked as paid and leave the debt. The amount comes out of the payment pocket."))
                 }
                 Section {
-                    MoneyField(title: T("Amount"), amount: $amount)
+                    MoneyField(title: T("Bank charged"), amount: $statement)
+                        .onChange(of: statement) { _, _ in statementTouched = true }
+                    MoneyField(title: T("You paid"), amount: $amount)
                         .id(covers)
                     DayDatePicker(title: T("Date"), day: $date)
+                } header: {
+                    Text(T("What the bank says"))
                 } footer: {
-                    Text(T("Payment pocket: %@. Total debt: %@.", MoneyFormat.cop(status.pocketBalance), MoneyFormat.cop(status.debt)))
-                }
-                if covers != .none {
-                    Section {
-                        MoneyRow(title: T("Set aside for these expenses"), amount: setAsideForCovered)
-                        MoneyRow(title: T("You are paying"), amount: amount)
-                        let diff = amount - setAsideForCovered
-                        MoneyRow(title: T("Difference"), amount: diff, color: diff > 0 ? .orange : (diff < 0 ? .green : .secondary),
-                                 subtitle: diff > 0 ? T("More than set aside: the pocket covers it or goes negative") : (diff < 0 ? T("Less than set aside: the rest stays in the pocket") : nil))
-                        MoneyRow(title: T("Pocket after paying"), amount: status.pocketBalance - amount, emphasis: true,
-                                 color: status.pocketBalance - amount < 0 ? .red : .primary)
-                    } header: {
-                        Text(T("Had vs. paid"))
+                    let gap = statement - coveredAmount
+                    if statement > 0 && gap != 0 {
+                        Text(T("The bank charged %@ %@ than the expenses recorded in the app. Check for missing expenses, interest or fees.", MoneyFormat.cop(Swift.abs(gap)), gap > 0 ? T("more") : T("less")))
+                    } else {
+                        Text(T("Payment pocket: %@. Total debt: %@.", MoneyFormat.cop(status.pocketBalance), MoneyFormat.cop(status.debt)))
                     }
                 }
                 Section {
-                    Toggle(T("Set what is left in the pocket"), isOn: $setPocket)
-                    if setPocket {
-                        MoneyField(title: T("Pocket after paying"), amount: $pocketAfter)
-                        MoneyRow(title: T("Computed"), amount: status.pocketBalance - amount, color: .secondary,
-                                 subtitle: T("The difference is recorded as a pocket reconciliation"))
+                    if covers != .none {
+                        MoneyRow(title: T("Set aside for these expenses"), amount: setAsideForCovered)
+                        let diff = amount - setAsideForCovered
+                        MoneyRow(title: T("Paid minus set aside"), amount: diff, showSign: true, color: diff > 0 ? .orange : (diff < 0 ? .green : .secondary),
+                                 subtitle: diff > 0 ? T("More than set aside: the pocket covers it or goes negative") : (diff < 0 ? T("Less than set aside: the rest stays in the pocket") : nil))
                     }
+                    MoneyRow(title: T("Computed"), amount: status.pocketBalance - amount, color: .secondary)
+                    MoneyField(title: T("Left in the pocket"), amount: $pocketAfter)
+                        .id(amount)
+                } header: {
+                    Text(T("Payment pocket"))
                 } footer: {
-                    Text(T("Optional. Use it when the real balance in your bank pocket differs from what the app computes."))
+                    Text(T("Write what really stays in the pocket. If it differs from the computed value, the difference is recorded as a pocket reconciliation."))
                 }
             }
             .navigationTitle(T("Payment to %@", status.card.name))
@@ -600,16 +621,22 @@ struct CardPaymentView: View {
                     covers = status.dueNow > 0 ? .previousCut : .allPending
                 }
                 amount = coveredAmount > 0 ? coveredAmount : status.debt
+                statement = amount
                 date = model.today
                 pocketAfter = max(0, status.pocketBalance - amount)
+            }
+            .onChange(of: amount) { old, new in
+                if pocketAfter == max(0, status.pocketBalance - old) { pocketAfter = max(0, status.pocketBalance - new) }
+                if !statementTouched { statement = new }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(T("Record")) {
-                        let p = CardPayment(cardId: status.card.id!, date: date, amount: amount)
+                        let p = CardPayment(cardId: status.card.id!, date: date, amount: amount,
+                                            statementAmount: statement > 0 ? statement : nil, cycleEnd: coveredThrough)
                         let through = coveredThrough
-                        let target: Int64? = setPocket ? pocketAfter : nil
+                        let target: Int64? = pocketAfter != status.pocketBalance - amount ? pocketAfter : nil
                         if model.perform({ try model.db.payCard(p, markPaidThrough: through, pocketBalanceAfter: target) }) { dismiss() }
                     }
                     .disabled(amount <= 0)
