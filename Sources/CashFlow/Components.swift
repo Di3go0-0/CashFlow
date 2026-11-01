@@ -107,17 +107,100 @@ struct DayDatePicker: View {
 
 struct MonthSwitcher: View {
     @Binding var month: YearMonth
+    @State private var jumping = false
 
     var body: some View {
         HStack {
             Button { month = month.previous } label: { Image(systemName: "chevron.left") }
                 .buttonStyle(.borderless)
             Spacer()
-            Text(month.displayName).font(.headline)
+            Button { jumping = true } label: {
+                HStack(spacing: 4) {
+                    Text(month.displayName).font(.headline)
+                    Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.borderless)
+            .tint(.primary)
             Spacer()
             Button { month = month.next } label: { Image(systemName: "chevron.right") }
                 .buttonStyle(.borderless)
         }
+        .sheet(isPresented: $jumping) { MonthJumpSheet(month: $month) }
+    }
+}
+
+/// Salto rápido a cualquier mes: año con flechas y los doce meses en cuadrícula.
+struct MonthJumpSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Binding var month: YearMonth
+    @State private var year: Int = YearMonth.current().year
+
+    private var monthsWithData: Set<String> { Set(model.snapshot.projections.map { $0.month.key }) }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                HStack {
+                    Button { year -= 1 } label: { Image(systemName: "chevron.left") }
+                    Spacer()
+                    Text(String(year)).font(.title2.weight(.bold)).monospacedDigit()
+                    Spacer()
+                    Button { year += 1 } label: { Image(systemName: "chevron.right") }
+                }
+                .padding(.horizontal, 8)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                    ForEach(1...12, id: \.self) { m in
+                        let ym = YearMonth(year: year, month: m)
+                        let selected = ym == month
+                        let isNow = ym == .current()
+                        Button {
+                            month = ym
+                            dismiss()
+                        } label: {
+                            VStack(spacing: 4) {
+                                Text(ym.monthName.prefix(3).capitalized).font(.body.weight(selected ? .bold : .regular))
+                                Circle().fill(monthsWithData.contains(ym.key) ? Theme.accent : .clear).frame(width: 5, height: 5)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(selected ? Theme.accent.opacity(0.18) : Color(.secondarySystemGroupedBackground),
+                                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(isNow ? Theme.accent : .clear, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Button {
+                    month = .current()
+                    dismiss()
+                } label: {
+                    Label(T("Go to today"), systemImage: "calendar.badge.clock")
+                }
+                .buttonStyle(.bordered)
+                Spacer()
+            }
+            .padding()
+            .navigationTitle(T("Go to month"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(T("Close")) { dismiss() } } }
+            .onAppear { year = month.year }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+/// Botón del ojo: oculta los montos y deja solo porcentajes.
+struct HideAmountsButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Button { model.hideAmounts.toggle() } label: {
+            Image(systemName: model.hideAmounts ? "eye.slash" : "eye")
+        }
+        .accessibilityLabel(model.hideAmounts ? T("Show amounts") : T("Hide amounts"))
     }
 }
 
@@ -341,6 +424,7 @@ extension Color {
 
 /// "4.5M", "250k", "900"
 func compactCOP(_ v: Int64) -> String {
+    if MoneyFormat.hidden { return MoneyFormat.mask }
     let a = Swift.abs(Double(v))
     let sign = v < 0 ? "-" : ""
     if a >= 1_000_000 {

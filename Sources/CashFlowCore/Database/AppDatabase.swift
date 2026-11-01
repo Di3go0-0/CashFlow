@@ -285,6 +285,20 @@ public final class AppDatabase: Sendable {
                 t.add(column: "commitmentId", .integer).indexed().references("commitment", onDelete: .setNull)
             }
         }
+        m.registerMigration("v8") { db in
+            try db.alter(table: "card") { t in
+                t.add(column: "feeAmount", .integer).notNull().defaults(to: 0)
+                t.add(column: "feeSince", .text)
+            }
+            try db.alter(table: "installmentPlan") { t in
+                t.add(column: "interestFree", .boolean).notNull().defaults(to: true)
+                t.add(column: "installmentAmount", .integer)
+            }
+            try db.alter(table: "cardExpense") { t in
+                t.add(column: "installmentPlanId", .integer).indexed().references("installmentPlan", onDelete: .setNull)
+                t.add(column: "isFee", .boolean).notNull().defaults(to: false)
+            }
+        }
         return m
     }
 }

@@ -8,7 +8,13 @@ struct CardsView: View {
     @State private var showNew = false
 
     var body: some View {
+        @Bindable var model = model
         List {
+            Section {
+                MonthSwitcher(month: $model.month)
+            } footer: {
+                Text(T("The month you pick here follows you across tabs. Each credit card opens on the cycle that closes in that month."))
+            }
             let cards = model.cardStatuses
             if cards.isEmpty {
                 Section {
@@ -36,11 +42,13 @@ struct CardEditView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var card: Card
+    @State private var hasFee: Bool
     private let isNew: Bool
 
     init(card: Card?) {
         isNew = card == nil
         _card = State(initialValue: card ?? Card(name: "", creditLimit: 0, cutDay: 15, payDay: 5))
+        _hasFee = State(initialValue: (card?.feeAmount ?? 0) > 0)
     }
 
     var body: some View {
@@ -57,6 +65,14 @@ struct CardEditView: View {
                     let c = CardCycle.containing(model.today, cutDay: card.cutDay, payDay: card.payDay)
                     Text(T("Current cycle: %@. Due on %@.", c.displayRange, c.paymentDue.shortDisplay))
                 }
+                Section {
+                    Toggle(T("Charges a monthly fee"), isOn: $hasFee)
+                    if hasFee {
+                        MoneyField(title: T("Fee per closing"), amount: $card.feeAmount)
+                    }
+                } footer: {
+                    Text(T("The fee is added as an expense on each closing day, starting this month, and covered from the extra balance automatically."))
+                }
                 if !isNew {
                     Section {
                         Toggle(T("Archived"), isOn: $card.isArchived)
@@ -69,7 +85,9 @@ struct CardEditView: View {
                 ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(T("Save")) {
-                        let c = card
+                        var c = card
+                        if !hasFee { c.feeAmount = 0 }
+                        if hasFee && c.feeAmount > 0 && c.feeSince == nil { c.feeSince = model.month }
                         let ok = isNew
                             ? model.perform { try model.db.createCard(c, month: model.month) }
                             : model.write { db in try c.update(db) }
@@ -90,14 +108,20 @@ struct CardDetailView: View {
     @State private var editingExpense: CardExpense?
     @State private var showNewExpense = false
     @State private var showPayment = false
+    @State private var payingCycle: CardCycle?
 
     private var status: CardStatus? {
         guard let card = model.snapshot.card(cardId) else { return nil }
         return model.snapshot.cardStatus(card, asOf: model.today)
     }
 
+    /// Ciclo que cierra en el mes elegido en la app.
+    private func baseCycle(_ st: CardStatus) -> CardCycle {
+        st.card.cycle(containing: st.card.cutDate(in: model.month))
+    }
+
     private func cycle(_ st: CardStatus) -> CardCycle {
-        var c = st.cycle
+        var c = baseCycle(st)
         if cycleOffset > 0 { for _ in 0..<cycleOffset { c = c.next } }
         if cycleOffset < 0 { for _ in 0..<(-cycleOffset) { c = c.previous } }
         return c
@@ -153,6 +177,46 @@ struct CardDetailView: View {
                     }
                 }
 
+                let rep = model.snapshot.cycleReport(card: st.card, cycle: cyc)
+                if rep.charged > 0 || !rep.payments.isEmpty {
+                    Section {
+                        MoneyRow(title: T("Charged"), amount: rep.charged)
+                        MoneyRow(title: T("Set aside in the pocket"), amount: rep.allocated,
+                                 color: rep.allocated < rep.charged ? .orange : .primary,
+                                 subtitle: rep.allocated < rep.charged ? T("Missing %@", MoneyFormat.cop(rep.charged - rep.allocated)) : nil)
+                        if rep.payments.isEmpty {
+                            if rep.unpaid > 0 {
+                                MoneyRow(title: T("Still unpaid"), amount: rep.unpaid, color: .orange)
+                                Button {
+                                    payingCycle = cyc
+                                } label: {
+                                    Label(T("Record what you paid for this cycle"), systemImage: "banknote")
+                                }
+                            } else {
+                                Text(T("Everything in this cycle is marked as paid.")).font(.caption).foregroundStyle(.secondary)
+                            }
+                        } else {
+                            ForEach(rep.payments) { p in
+                                MoneyRow(title: T("Paid on %@", p.date.shortDisplay), amount: p.amount, color: .green,
+                                         subtitle: p.note.isEmpty ? nil : p.note)
+                            }
+                            let diff = rep.paid - rep.allocated
+                            MoneyRow(title: T("Paid minus set aside"), amount: diff, color: diff > 0 ? .orange : (diff < 0 ? .green : .secondary),
+                                     subtitle: diff > 0 ? T("You paid more than you had set aside") : (diff < 0 ? T("You paid less than you had set aside") : nil))
+                            if let after = rep.pocketAfterPayment {
+                                MoneyRow(title: T("Pocket after paying"), amount: after, emphasis: true, color: after < 0 ? .red : .primary)
+                            }
+                            if rep.unpaid > 0 {
+                                MoneyRow(title: T("Still unpaid"), amount: rep.unpaid, color: .orange)
+                            }
+                        }
+                    } header: {
+                        Text(T("Cycle balance"))
+                    } footer: {
+                        Text(T("Payments count for a cycle from its closing day until the day before the next closing."))
+                    }
+                }
+
                 let pays = model.snapshot.payments.filter { $0.cardId == cardId }.sorted { $0.date > $1.date }.prefix(5)
                 if !pays.isEmpty {
                     Section(T("Recent payments")) {
@@ -186,6 +250,7 @@ struct CardDetailView: View {
             .sheet(isPresented: $showNewExpense) { CardExpenseEditView(expense: nil, defaultCardId: cardId) }
             .sheet(item: $editingExpense) { CardExpenseEditView(expense: $0, defaultCardId: cardId) }
             .sheet(isPresented: $showPayment) { CardPaymentView(status: st) }
+            .sheet(item: $payingCycle) { CardPaymentView(status: st, cycleEnd: $0.end) }
             .sheet(isPresented: $editingCard) { CardEditView(card: st.card) }
         } else {
             ContentUnavailableView(T("Credit card not found"), systemImage: "creditcard")
@@ -270,7 +335,14 @@ struct CardExpenseEditView: View {
                             .onAppear { if expense.rate == nil { expense.rate = model.rate } }
                         MoneyRow(title: T("In pesos"), amount: Exchange.toCOP(amountMinor: expense.amount, currency: .usd, rate: expense.rate))
                     }
+                } footer: {
+                    if expense.isGenerated {
+                        Text(expense.isFee
+                             ? T("Generated by the app on the closing day as the credit card fee. Change it in the credit card.")
+                             : T("Generated by the app on the closing day as an installment. Change it in the installment purchase."))
+                    }
                 }
+                .disabled(expense.isGenerated)
                 Section {
                     TextField(T("Reason"), text: $expense.reason)
                     DayDatePicker(title: T("Date"), day: $expense.date)
@@ -420,24 +492,45 @@ struct CardPaymentView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     var status: CardStatus
+    /// Corte del ciclo que se está pagando, cuando se abre desde un ciclo concreto.
+    var cycleEnd: DayDate? = nil
     @State private var amount: Int64 = 0
     @State private var date: DayDate = .today()
     @State private var covers: Coverage = .previousCut
     @State private var setPocket = false
     @State private var pocketAfter: Int64 = 0
 
-    enum Coverage: Hashable { case previousCut, allPending, none }
+    enum Coverage: Hashable { case previousCut, cycle, allPending, none }
 
-    private var pendingThroughToday: Int64 {
-        status.expenses.filter { !$0.expense.isPaid && $0.expense.date <= model.today }.reduce(0) { $0 + $1.expense.amountCOP }
+    private func unpaid(through d: DayDate) -> [CardExpenseStatus] {
+        status.expenses.filter { !$0.expense.isPaid && $0.expense.date <= d }
     }
+
+    private var pendingThroughToday: Int64 { unpaid(through: model.today).reduce(0) { $0 + $1.expense.amountCOP } }
+    private var pendingThroughCycle: Int64 { cycleEnd.map { unpaid(through: $0).reduce(0) { $0 + $1.expense.amountCOP } } ?? 0 }
 
     private var coveredAmount: Int64 {
         switch covers {
         case .previousCut: status.dueNow
+        case .cycle: pendingThroughCycle
         case .allPending: pendingThroughToday
         case .none: 0
         }
+    }
+
+    private var coveredThrough: DayDate? {
+        switch covers {
+        case .previousCut: status.cycle.previous.end
+        case .cycle: cycleEnd
+        case .allPending: model.today
+        case .none: nil
+        }
+    }
+
+    /// Lo que ya estaba apartado en el bolsillo para los gastos que este pago cubre.
+    private var setAsideForCovered: Int64 {
+        guard let d = coveredThrough else { return 0 }
+        return unpaid(through: d).reduce(0) { $0 + min($1.allocated, $1.expense.amountCOP) }
     }
 
     var body: some View {
@@ -445,6 +538,9 @@ struct CardPaymentView: View {
             Form {
                 Section {
                     Picker(T("This payment covers"), selection: $covers) {
+                        if let end = cycleEnd, end != status.cycle.previous.end {
+                            Text(T("Up to the closing on %@ · %@", end.shortDisplay, MoneyFormat.cop(pendingThroughCycle))).tag(Coverage.cycle)
+                        }
                         Text(T("Up to the closing on %@ · %@", status.cycle.previous.end.shortDisplay, MoneyFormat.cop(status.dueNow))).tag(Coverage.previousCut)
                         Text(T("Everything pending up to today · %@", MoneyFormat.cop(pendingThroughToday))).tag(Coverage.allPending)
                         Text(T("Nothing, just record the payment")).tag(Coverage.none)
@@ -466,6 +562,19 @@ struct CardPaymentView: View {
                 } footer: {
                     Text(T("Payment pocket: %@. Total debt: %@.", MoneyFormat.cop(status.pocketBalance), MoneyFormat.cop(status.debt)))
                 }
+                if covers != .none {
+                    Section {
+                        MoneyRow(title: T("Set aside for these expenses"), amount: setAsideForCovered)
+                        MoneyRow(title: T("You are paying"), amount: amount)
+                        let diff = amount - setAsideForCovered
+                        MoneyRow(title: T("Difference"), amount: diff, color: diff > 0 ? .orange : (diff < 0 ? .green : .secondary),
+                                 subtitle: diff > 0 ? T("More than set aside: the pocket covers it or goes negative") : (diff < 0 ? T("Less than set aside: the rest stays in the pocket") : nil))
+                        MoneyRow(title: T("Pocket after paying"), amount: status.pocketBalance - amount, emphasis: true,
+                                 color: status.pocketBalance - amount < 0 ? .red : .primary)
+                    } header: {
+                        Text(T("Had vs. paid"))
+                    }
+                }
                 Section {
                     Toggle(T("Set what is left in the pocket"), isOn: $setPocket)
                     if setPocket {
@@ -480,7 +589,11 @@ struct CardPaymentView: View {
             .navigationTitle(T("Payment to %@", status.card.name))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                covers = status.dueNow > 0 ? .previousCut : .allPending
+                if let end = cycleEnd, end != status.cycle.previous.end {
+                    covers = .cycle
+                } else {
+                    covers = status.dueNow > 0 ? .previousCut : .allPending
+                }
                 amount = coveredAmount > 0 ? coveredAmount : status.debt
                 date = model.today
                 pocketAfter = max(0, status.pocketBalance - amount)
@@ -490,11 +603,7 @@ struct CardPaymentView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(T("Record")) {
                         let p = CardPayment(cardId: status.card.id!, date: date, amount: amount)
-                        let through: DayDate? = switch covers {
-                        case .previousCut: status.cycle.previous.end
-                        case .allPending: model.today
-                        case .none: nil
-                        }
+                        let through = coveredThrough
                         let target: Int64? = setPocket ? pocketAfter : nil
                         if model.perform({ try model.db.payCard(p, markPaidThrough: through, pocketBalanceAfter: target) }) { dismiss() }
                     }

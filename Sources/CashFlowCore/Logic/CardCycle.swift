@@ -1,7 +1,8 @@
 import Foundation
 
 /// Ciclo de facturación de una tarjeta: del día siguiente al corte anterior hasta el corte.
-public struct CardCycle: Hashable, Sendable {
+public struct CardCycle: Hashable, Sendable, Identifiable {
+    public var id: String { "\(start.key)|\(end.key)" }
     public let start: DayDate
     /// Día de corte, incluido.
     public let end: DayDate

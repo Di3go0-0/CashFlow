@@ -52,6 +52,20 @@ struct SummaryView: View {
                 }
             }
 
+            if s.committed > 0 || s.income > 0 {
+                Section(T("Where the money goes")) {
+                    PlanDonutChart(summary: s, colors: Palette.series(scheme))
+                        .frame(height: 260)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                }
+            }
+
+            Section(T("Last 6 months")) {
+                IncomeSpentChart(points: history(), colors: Palette.series(scheme))
+                    .frame(height: 220)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+            }
+
             Section(T("This month")) {
                 MoneyRow(title: T("Income"), amount: s.income,
                          subtitle: s.pendingIncome > 0 ? T("Pending: %@", MoneyFormat.cop(s.pendingIncome)) : nil)
@@ -75,20 +89,6 @@ struct SummaryView: View {
                     MoneyRow(title: T("At this pace, month end"), amount: projected, color: projected < 0 ? .orange : .secondary,
                              subtitle: T("If spending from the extra balance continues at the current daily rate"))
                 }
-            }
-
-            if s.committed > 0 || s.income > 0 {
-                Section(T("Where the money goes")) {
-                    PlanDonutChart(summary: s, colors: Palette.series(scheme))
-                        .frame(height: 260)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                }
-            }
-
-            Section(T("Last 6 months")) {
-                IncomeSpentChart(points: history(), colors: Palette.series(scheme))
-                    .frame(height: 220)
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
             }
 
             Section(T("Funds")) {
@@ -121,7 +121,10 @@ struct SummaryView: View {
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showExpense = true } label: { Image(systemName: "plus") }
+                HStack {
+                    HideAmountsButton()
+                    Button { showExpense = true } label: { Image(systemName: "plus") }
+                }
             }
         }
         .sheet(isPresented: $showExpense) { NewExpenseSheet(initialCardId: nil) }
@@ -274,14 +277,14 @@ struct HeroCard: View {
             .buttonStyle(.borderless)
             .foregroundStyle(.white.opacity(0.9))
             VStack(alignment: .leading, spacing: 2) {
-                Text(T("Remaining this month")).font(.caption).foregroundStyle(.white.opacity(0.75))
-                Text(MoneyFormat.cop(summary.remaining))
+                Text(hidden ? T("Remaining, as a share of income") : T("Remaining this month")).font(.caption).foregroundStyle(.white.opacity(0.75))
+                Text(hidden ? percent(summary.remaining) : MoneyFormat.cop(summary.remaining))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(summary.remaining < 0 ? Color(hex: 0xfecaca) : .white)
             }
             HStack(spacing: 0) {
-                heroStat(T("Income"), summary.income)
+                heroStat(T("Income"), summary.income, isBase: true)
                 heroStat(T("Spent"), summary.spent)
                 heroStat(T("Saved"), summary.saved)
             }
@@ -291,10 +294,20 @@ struct HeroCard: View {
         .padding(.horizontal, 4)
     }
 
-    private func heroStat(_ title: String, _ amount: Int64) -> some View {
+    private var hidden: Bool { MoneyFormat.hidden }
+
+    /// Porcentaje sobre el ingreso del mes, para el modo discreto.
+    private func percent(_ amount: Int64) -> String {
+        guard summary.income > 0 else { return "—" }
+        let p = (Double(amount) / Double(summary.income) * 100).rounded()
+        return "\(Int(p))%"
+    }
+
+    private func heroStat(_ title: String, _ amount: Int64, isBase: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption2).foregroundStyle(.white.opacity(0.7))
-            Text(compactCOP(amount)).font(.subheadline.weight(.semibold)).foregroundStyle(.white).monospacedDigit()
+            Text(hidden ? (isBase ? "100%" : percent(amount)) : compactCOP(amount))
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.white).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -239,15 +239,39 @@ public struct Card: Codable, Identifiable, Hashable, Sendable, FetchableRecord, 
     /// Día del mes límite de pago.
     public var payDay: Int
     public var isArchived: Bool
+    /// Cuota de manejo que el banco cobra en cada corte. 0 = no tiene.
+    public var feeAmount: Int64
+    /// Primer mes en que la app genera la cuota de manejo sola. Nil = nunca.
+    public var feeSince: YearMonth?
 
-    public init(id: Int64? = nil, name: String, creditLimit: Int64, cutDay: Int, payDay: Int, isArchived: Bool = false) {
+    public init(id: Int64? = nil, name: String, creditLimit: Int64, cutDay: Int, payDay: Int, isArchived: Bool = false,
+                feeAmount: Int64 = 0, feeSince: YearMonth? = nil) {
         self.id = id
         self.name = name
         self.creditLimit = creditLimit
         self.cutDay = cutDay
         self.payDay = payDay
         self.isArchived = isArchived
+        self.feeAmount = feeAmount
+        self.feeSince = feeSince
     }
+
+    enum CodingKeys: String, CodingKey { case id, name, creditLimit, cutDay, payDay, isArchived, feeAmount, feeSince }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(Int64.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        creditLimit = try c.decode(Int64.self, forKey: .creditLimit)
+        cutDay = try c.decode(Int.self, forKey: .cutDay)
+        payDay = try c.decode(Int.self, forKey: .payDay)
+        isArchived = try c.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        feeAmount = try c.decodeIfPresent(Int64.self, forKey: .feeAmount) ?? 0
+        feeSince = try c.decodeIfPresent(YearMonth.self, forKey: .feeSince)
+    }
+
+    /// Fecha de corte dentro de un mes.
+    public func cutDate(in month: YearMonth) -> DayDate { DayDate.clamped(year: month.year, month: month.month, day: cutDay) }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
@@ -262,9 +286,13 @@ public struct InstallmentPlan: Codable, Identifiable, Hashable, Sendable, Fetcha
     public var cardId: Int64?
     public var startMonth: YearMonth
     public var note: String
+    /// Sin intereses: la cuota es el total dividido en partes iguales.
+    public var interestFree: Bool
+    /// Cuota real cuando hay intereses (la que cobra el banco). Nil = total / cuotas.
+    public var installmentAmount: Int64?
 
     public init(id: Int64? = nil, name: String, totalAmount: Int64, installmentCount: Int, cardId: Int64? = nil,
-                startMonth: YearMonth, note: String = "") {
+                startMonth: YearMonth, note: String = "", interestFree: Bool = true, installmentAmount: Int64? = nil) {
         self.id = id
         self.name = name
         self.totalAmount = totalAmount
@@ -272,10 +300,34 @@ public struct InstallmentPlan: Codable, Identifiable, Hashable, Sendable, Fetcha
         self.cardId = cardId
         self.startMonth = startMonth
         self.note = note
+        self.interestFree = interestFree
+        self.installmentAmount = installmentAmount
     }
 
-    public var monthlyAmount: Int64 {
+    enum CodingKeys: String, CodingKey { case id, name, totalAmount, installmentCount, cardId, startMonth, note, interestFree, installmentAmount }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(Int64.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        totalAmount = try c.decode(Int64.self, forKey: .totalAmount)
+        installmentCount = try c.decode(Int.self, forKey: .installmentCount)
+        cardId = try c.decodeIfPresent(Int64.self, forKey: .cardId)
+        startMonth = try c.decode(YearMonth.self, forKey: .startMonth)
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        interestFree = try c.decodeIfPresent(Bool.self, forKey: .interestFree) ?? true
+        installmentAmount = try c.decodeIfPresent(Int64.self, forKey: .installmentAmount)
+    }
+
+    /// Capital que se amortiza por cuota.
+    public var capitalPerInstallment: Int64 {
         installmentCount > 0 ? totalAmount / Int64(installmentCount) : totalAmount
+    }
+
+    /// Lo que se paga cada mes: la cuota del banco si la hay, si no el capital en partes iguales.
+    public var monthlyAmount: Int64 {
+        if !interestFree, let a = installmentAmount, a > 0 { return a }
+        return capitalPerInstallment
     }
 
     public var endMonth: YearMonth { startMonth.adding(months: max(installmentCount, 1) - 1) }
@@ -299,7 +351,7 @@ public struct InstallmentPlan: Codable, Identifiable, Hashable, Sendable, Fetcha
     public func outstanding(after month: YearMonth) -> Int64 {
         let billed = billedInstallments(through: month)
         if billed >= installmentCount { return 0 }
-        return max(0, totalAmount - monthlyAmount * Int64(billed))
+        return max(0, totalAmount - capitalPerInstallment * Int64(billed))
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
@@ -550,9 +602,13 @@ public struct CardExpense: Codable, Identifiable, Hashable, Sendable, FetchableR
     /// Ya le pagué este gasto a la tarjeta.
     public var isPaid: Bool
     public var note: String
+    /// Cuota de una compra a crédito, generada por la app en cada corte.
+    public var installmentPlanId: Int64?
+    /// Cuota de manejo generada por la app en el corte.
+    public var isFee: Bool
 
     public init(id: Int64? = nil, cardId: Int64, date: DayDate, amount: Int64, currency: Currency, rate: Double? = nil,
-                reason: String, isPaid: Bool = false, note: String = "") {
+                reason: String, isPaid: Bool = false, note: String = "", installmentPlanId: Int64? = nil, isFee: Bool = false) {
         self.id = id
         self.cardId = cardId
         self.date = date
@@ -563,7 +619,30 @@ public struct CardExpense: Codable, Identifiable, Hashable, Sendable, FetchableR
         self.reason = reason
         self.isPaid = isPaid
         self.note = note
+        self.installmentPlanId = installmentPlanId
+        self.isFee = isFee
     }
+
+    enum CodingKeys: String, CodingKey { case id, cardId, date, amount, currency, rate, amountCOP, reason, isPaid, note, installmentPlanId, isFee }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(Int64.self, forKey: .id)
+        cardId = try c.decode(Int64.self, forKey: .cardId)
+        date = try c.decode(DayDate.self, forKey: .date)
+        amount = try c.decode(Int64.self, forKey: .amount)
+        currency = try c.decode(Currency.self, forKey: .currency)
+        rate = try c.decodeIfPresent(Double.self, forKey: .rate)
+        amountCOP = try c.decode(Int64.self, forKey: .amountCOP)
+        reason = try c.decode(String.self, forKey: .reason)
+        isPaid = try c.decodeIfPresent(Bool.self, forKey: .isPaid) ?? false
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        installmentPlanId = try c.decodeIfPresent(Int64.self, forKey: .installmentPlanId)
+        isFee = try c.decodeIfPresent(Bool.self, forKey: .isFee) ?? false
+    }
+
+    /// Generado por la app (cuota de plan o cuota de manejo): no se edita el monto a mano.
+    public var isGenerated: Bool { installmentPlanId != nil || isFee }
 
     public mutating func recomputeCOP() {
         if currency == .cop { rate = nil }
@@ -647,4 +726,5 @@ public struct Setting: Codable, Hashable, Sendable, FetchableRecord, Persistable
     public static let cachedRateDateKey = "trm.cachedDate"
     public static let languageKey = "ui.language"
     public static let remindersKey = "reminders.enabled"
+    public static let hideAmountsKey = "ui.hideAmounts"
 }

@@ -162,7 +162,7 @@ struct PlansView: View {
         List {
             let plans = model.snapshot.plans.sorted { $0.startMonth > $1.startMonth }
             if plans.isEmpty {
-                EmptyHint(text: T("An installment purchase adds its installment to each month's plan while it is active, and uses up credit card limit until billed."))
+                EmptyHint(text: T("An installment purchase adds its installment to each month's plan while it is active. On a credit card it is also charged on each closing day and uses up limit until billed."))
             }
             ForEach(plans) { p in
                 Button { editing = p } label: {
@@ -180,7 +180,7 @@ struct PlansView: View {
             }
             .onDelete { idx in
                 let ids = idx.map { plans[$0].id! }
-                model.write { db in try InstallmentPlan.deleteAll(db, ids: ids) }
+                model.perform { for id in ids { try model.db.deletePlan(id: id) } }
             }
         }
         .navigationTitle(T("Installment purchases"))
@@ -206,17 +206,39 @@ struct PlanEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField(T("Name"), text: $plan.name)
-                MoneyField(title: T("Total"), amount: $plan.totalAmount)
-                Stepper(T("Installments: %d", plan.installmentCount), value: $plan.installmentCount, in: 1...60)
-                MonthSwitcher(month: $plan.startMonth)
-                Picker(T("Credit card"), selection: $plan.cardId) {
-                    Text(T("None")).tag(Int64?.none)
-                    ForEach(model.activeCards) { c in
-                        Text(c.name).tag(Int64?.some(c.id!))
+                Section {
+                    TextField(T("Name"), text: $plan.name)
+                    MoneyField(title: T("Total"), amount: $plan.totalAmount)
+                    Stepper(T("Installments: %d", plan.installmentCount), value: $plan.installmentCount, in: 1...60)
+                    MonthSwitcher(month: $plan.startMonth)
+                } footer: {
+                    Text(T("First installment in %@, last in %@.", plan.startMonth.displayName, plan.endMonth.displayName))
+                }
+                Section {
+                    Toggle(T("Interest-free"), isOn: $plan.interestFree)
+                    if !plan.interestFree {
+                        MoneyField(title: T("Installment charged by the bank"), amount: Binding(
+                            get: { plan.installmentAmount ?? 0 },
+                            set: { plan.installmentAmount = $0 > 0 ? $0 : nil }))
+                    }
+                    MoneyRow(title: T("Monthly installment"), amount: plan.monthlyAmount, emphasis: true)
+                } footer: {
+                    if !plan.interestFree {
+                        Text(T("With interest the bank's installment is higher than the total divided by the number of installments. Capital per installment: %@.", MoneyFormat.cop(plan.capitalPerInstallment)))
                     }
                 }
-                MoneyRow(title: T("Monthly installment"), amount: plan.monthlyAmount, emphasis: true)
+                Section {
+                    Picker(T("Credit card"), selection: $plan.cardId) {
+                        Text(T("None")).tag(Int64?.none)
+                        ForEach(model.activeCards) { c in
+                            Text(c.name).tag(Int64?.some(c.id!))
+                        }
+                    }
+                } footer: {
+                    Text(plan.cardId == nil
+                         ? T("Without a credit card the installment shows up each month as a debt in the month plan. Pay it with an expense taken from that commitment.")
+                         : T("On a credit card the installment is charged on each closing day, covered from its month commitment, and the rest of the purchase uses up limit until billed."))
+                }
             }
             .navigationTitle(plan.id == nil ? T("New installment purchase") : T("Installment purchase"))
             .navigationBarTitleDisplayMode(.inline)
@@ -225,7 +247,7 @@ struct PlanEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(T("Save")) {
                         let p = plan
-                        if model.write({ db in var p = p; try p.save(db) }) { dismiss() }
+                        if model.perform({ try model.db.savePlan(p, from: model.month) }) { dismiss() }
                     }
                     .disabled(plan.name.trimmingCharacters(in: .whitespaces).isEmpty || plan.totalAmount <= 0)
                 }

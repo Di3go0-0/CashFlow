@@ -33,12 +33,32 @@ struct FundsView: View {
                 }
             }
             if !pockets.isEmpty {
-                Section(T("Credit card payment pockets")) {
+                Section {
                     ForEach(Array(pockets.enumerated()), id: \.element.id) { i, r in
                         NavigationLink(value: r.fund.id!) {
-                            FundRow(report: r, index: i, systemImage: "creditcard")
+                            VStack(alignment: .leading, spacing: 4) {
+                                FundRow(report: r, index: i, systemImage: "creditcard")
+                                if let st = model.cardStatuses.first(where: { $0.card.id == r.fund.cardId }) {
+                                    Group {
+                                        if st.dueNow > 0 {
+                                            Text(T("Due on %@: %@", st.cycle.previous.paymentDue.shortDisplay, MoneyFormat.cop(st.dueNow)))
+                                                .foregroundStyle(r.balance < st.dueNow ? .orange : .secondary)
+                                        } else if st.debt > 0 {
+                                            Text(T("Not yet due: %@", MoneyFormat.cop(st.debt))).foregroundStyle(.secondary)
+                                        } else {
+                                            Label(T("Up to date"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                                        }
+                                    }
+                                    .font(.caption)
+                                    .padding(.leading, 36)
+                                }
+                            }
                         }
                     }
+                } header: {
+                    Text(T("Credit card payment pockets"))
+                } footer: {
+                    Text(T("Balances update the moment you record a payment. Top-ups add, payments subtract."))
                 }
             }
         }

@@ -50,6 +50,10 @@ public enum Exchange {
 }
 
 public enum MoneyFormat {
+    /// Modo discreto: los montos se muestran como puntos. La app lo activa con el botón del ojo.
+    nonisolated(unsafe) public static var hidden = false
+    public static let mask = "••••"
+
     private static func formatter(fractionDigits: Int) -> NumberFormatter {
         let f = NumberFormatter()
         f.numberStyle = .decimal
@@ -63,6 +67,7 @@ public enum MoneyFormat {
 
     /// `$1.250.000`
     public static func cop(_ pesos: Int64, showSign: Bool = false) -> String {
+        if hidden { return mask }
         let body = formatter(fractionDigits: 0).string(from: NSNumber(value: Swift.abs(pesos))) ?? "\(Swift.abs(pesos))"
         let sign = pesos < 0 ? "-" : (showSign && pesos > 0 ? "+" : "")
         return "\(sign)$\(body)"
@@ -70,6 +75,7 @@ public enum MoneyFormat {
 
     /// `US$12,50`
     public static func usd(cents: Int64, showSign: Bool = false) -> String {
+        if hidden { return mask }
         let value = Double(Swift.abs(cents)) / 100.0
         let body = formatter(fractionDigits: 2).string(from: NSNumber(value: value)) ?? "\(value)"
         let sign = cents < 0 ? "-" : (showSign && cents > 0 ? "+" : "")
@@ -85,6 +91,7 @@ public enum MoneyFormat {
 
     /// Forma corta para ejes de gráficas: `$1,2M`, `$850k`, `$900`.
     public static func compact(_ pesos: Int64) -> String {
+        if hidden { return mask }
         let sign = pesos < 0 ? "-" : ""
         let v = Double(Swift.abs(pesos))
         func trim(_ x: Double) -> String {

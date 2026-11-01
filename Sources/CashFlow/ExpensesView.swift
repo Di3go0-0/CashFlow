@@ -177,12 +177,27 @@ struct ExpensesView: View {
             if items.isEmpty {
                 EmptyHint(text: T("No expenses with %@ this month.", card.name))
             }
-            ForEach(items) { s in
-                Button { editingCard = s.expense } label: { CardExpenseRow(status: s, showAllocations: true) }.tint(.primary)
-            }
-            .onDelete { idx in
-                let ids = idx.map { items[$0].expense.id! }
-                model.write { db in try CardExpense.deleteAll(db, ids: ids) }
+            // Un mes puede partirse en dos ciclos de la tarjeta: se agrupan con su corte y su fecha de pago.
+            let cycles = Dictionary(grouping: items) { card.cycle(containing: $0.expense.date).end }
+            let ends = cycles.keys.sorted()
+            ForEach(ends, id: \.self) { end in
+                let group = cycles[end] ?? []
+                if ends.count > 1 {
+                    let c = card.cycle(containing: end)
+                    HStack {
+                        Label(T("Cycle %@", c.displayRange), systemImage: "arrow.triangle.2.circlepath")
+                        Spacer()
+                        Text(T("Due %@ · %@", c.paymentDue.shortDisplay, MoneyFormat.cop(group.reduce(0) { $0 + $1.expense.amountCOP })))
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(group) { s in
+                    Button { editingCard = s.expense } label: { CardExpenseRow(status: s, showAllocations: true) }.tint(.primary)
+                }
+                .onDelete { idx in
+                    let ids = idx.map { group[$0].expense.id! }
+                    model.write { db in try CardExpense.deleteAll(db, ids: ids) }
+                }
             }
         } header: {
             HStack {

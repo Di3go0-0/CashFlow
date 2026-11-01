@@ -335,6 +335,19 @@ public struct CardStatus: Hashable, Sendable, Identifiable {
     public var available: Int64 { card.creditLimit - debt - installmentsOutstanding }
 }
 
+public struct CardCycleReport: Hashable, Sendable {
+    public var cycle: CardCycle
+    public var expenses: [CardExpenseStatus]
+    public var charged: Int64
+    /// Plata apartada en el bolsillo para estos gastos (sin contar sobreabonos).
+    public var allocated: Int64
+    public var unpaid: Int64
+    public var payments: [CardPayment]
+    /// Saldo del bolsillo el día del último pago de este ciclo.
+    public var pocketAfterPayment: Int64?
+    public var paid: Int64 { payments.reduce(0) { $0 + $1.amount } }
+}
+
 public extension Snapshot {
     func cardStatus(_ card: Card, asOf: DayDate) -> CardStatus {
         let cardId = card.id!
@@ -359,6 +372,28 @@ public extension Snapshot {
             expenses: statuses,
             installmentsOutstanding: cardPlans.reduce(0) { $0 + $1.outstanding(after: asOf.yearMonth) },
             plans: cardPlans
+        )
+    }
+
+    /// Lo que pasó con un ciclo de la tarjeta: cuánto se cargó, cuánto se apartó, qué se pagó y cómo quedó el bolsillo.
+    func cycleReport(card: Card, cycle: CardCycle) -> CardCycleReport {
+        let cardId = card.id!
+        let allocByExpense = Dictionary(grouping: allocations, by: \.cardExpenseId)
+        let items = cardExpenses.filter { $0.cardId == cardId && cycle.contains($0.date) }
+            .map { CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? []) }
+        // Los pagos de un ciclo van desde su corte (incluido) hasta el día antes del siguiente corte.
+        let nextEnd = cycle.next.end
+        let pays = payments.filter { $0.cardId == cardId && $0.date >= cycle.end && $0.date < nextEnd }.sorted { $0.date < $1.date }
+        let pocket = pocket(of: cardId)
+        let after: Int64? = pays.last.flatMap { p in pocket.map { balance(of: $0.id!, asOf: p.date) } }
+        return CardCycleReport(
+            cycle: cycle,
+            expenses: items,
+            charged: items.reduce(0) { $0 + $1.expense.amountCOP },
+            allocated: items.reduce(0) { $0 + min($1.allocated, $1.expense.amountCOP) },
+            unpaid: items.filter { !$0.expense.isPaid }.reduce(0) { $0 + $1.expense.amountCOP },
+            payments: pays,
+            pocketAfterPayment: after
         )
     }
 

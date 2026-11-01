@@ -35,7 +35,7 @@ struct RootView: View {
             NavigationStack { ExpensesView() }
                 .tabItem { Label(T("Expenses"), systemImage: "cart") }
         }
-        .id(model.language)
+        .id("\(model.language.rawValue)-\(model.hideAmounts)")
         .tint(Theme.accent)
         .fontDesign(.rounded)
         .onChange(of: quick.pending, initial: true) { _, action in

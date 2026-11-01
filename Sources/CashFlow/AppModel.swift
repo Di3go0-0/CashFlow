@@ -29,6 +29,14 @@ final class AppModel {
         }
     }
 
+    /// Modo discreto: los montos se ven como puntos y el resumen habla en porcentajes.
+    var hideAmounts = false {
+        didSet {
+            MoneyFormat.hidden = hideAmounts
+            try? db.setSetting(Setting.hideAmountsKey, hideAmounts ? "1" : nil)
+        }
+    }
+
     /// TRM vigente: manual si está definida, si no la última descargada.
     private(set) var rate: Double?
     private(set) var rateSource = ""
@@ -40,6 +48,8 @@ final class AppModel {
         language = saved ?? .en
         L10n.language = language
         remindersEnabled = ((try? db.setting(Setting.remindersKey)) ?? nil) == "1"
+        hideAmounts = ((try? db.setting(Setting.hideAmountsKey)) ?? nil) == "1"
+        MoneyFormat.hidden = hideAmounts
         reload()
     }
 
@@ -61,8 +71,10 @@ final class AppModel {
             let current = YearMonth.current()
             if snapshot.projection(for: current) == nil {
                 try db.startMonth(current)
-                snapshot = try db.snapshot()
             }
+            // Cuotas de manejo y cuotas de planes de cada corte, por si cambió la tarjeta o el plan.
+            try db.syncCardCharges()
+            snapshot = try db.snapshot()
             if remindersEnabled { Reminders.reschedule(cards: activeCards, today: today) }
             publishWidgetSnapshot()
         } catch {

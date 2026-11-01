@@ -51,6 +51,7 @@ public extension AppDatabase {
                                         amount: p.monthlyAmount, date: month.firstDay, installmentPlanId: p.id)
                     try cm.insert(db)
                 }
+                try Self.syncCardCharges(db, month: month, projectionId: projection.id!)
                 if fromTemplates {
                     let funds = try Fund.filter(Column("isArchived") == false && Column("cardId") == nil).fetchAll(db)
                     for f in funds where f.defaultContribution > 0 {
@@ -575,6 +576,113 @@ public extension AppDatabase {
 
     /// Registra un pago de tarjeta y, si se pide, marca como pagados los gastos pendientes hasta una fecha.
     /// Con `pocketBalanceAfter`, deja el bolsillo de pago exactamente en ese saldo mediante un ajuste manual.
+    // MARK: Cargos generados por la tarjeta (cuota de manejo y cuotas de planes)
+
+    /// Garantiza que cada mes instanciado tenga, por tarjeta, la cuota de manejo y la cuota de cada plan
+    /// a crédito ligado, fechadas en el corte y amortiguadas. Idempotente: no duplica lo que ya existe.
+    func syncCardCharges() throws {
+        try write { db in
+            for p in try Projection.fetchAll(db) {
+                try Self.syncCardCharges(db, month: p.month, projectionId: p.id!)
+            }
+        }
+    }
+
+    static func syncCardCharges(_ db: Database, month: YearMonth, projectionId: Int64) throws {
+        let cards = try Card.filter(Column("isArchived") == false).fetchAll(db)
+        let plans = try InstallmentPlan.fetchAll(db)
+        for card in cards {
+            let cut = card.cutDate(in: month)
+            let existing = try CardExpense
+                .filter(Column("cardId") == card.id! && Column("date") >= month.firstDay && Column("date") <= month.lastDay)
+                .fetchAll(db)
+
+            if card.feeAmount > 0, let since = card.feeSince, month >= since, !existing.contains(where: \.isFee) {
+                var fee = CardExpense(cardId: card.id!, date: cut, amount: card.feeAmount, currency: .cop,
+                                      reason: L10n.tr("Card fee"), isFee: true)
+                try fee.insert(db)
+                var a = CardAllocation(cardExpenseId: fee.id!, fundId: nil, amount: card.feeAmount, date: cut)
+                try a.insert(db)
+            }
+
+            for plan in plans where plan.cardId == card.id {
+                guard let n = plan.installmentNumber(in: month) else { continue }
+                if existing.contains(where: { $0.installmentPlanId == plan.id }) { continue }
+                var e = CardExpense(cardId: card.id!, date: cut, amount: plan.monthlyAmount, currency: .cop,
+                                    reason: "\(plan.name) (\(n)/\(plan.installmentCount))", installmentPlanId: plan.id)
+                try e.insert(db)
+                var commitment = try Commitment
+                    .filter(Column("projectionId") == projectionId && Column("installmentPlanId") == plan.id!)
+                    .fetchOne(db)
+                if commitment == nil {
+                    var cm = Commitment(projectionId: projectionId, kind: .debt, name: e.reason,
+                                        amount: plan.monthlyAmount, date: month.firstDay, installmentPlanId: plan.id)
+                    try cm.insert(db)
+                    commitment = cm
+                }
+                if let cm = commitment {
+                    let paid = try Int64.fetchOne(db, sql: "SELECT COALESCE(SUM(amount),0) FROM cardAllocation WHERE commitmentId = ?", arguments: [cm.id!]) ?? 0
+                    let paidExp = try Int64.fetchOne(db, sql: "SELECT COALESCE(SUM(amountCOP),0) FROM expense WHERE commitmentId = ?", arguments: [cm.id!]) ?? 0
+                    let left = max(0, cm.amount - paid - paidExp)
+                    let amount = min(e.amountCOP, left)
+                    if amount > 0 {
+                        var a = CardAllocation(cardExpenseId: e.id!, fundId: nil, amount: amount, date: cut, commitmentId: cm.id)
+                        try a.insert(db)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Guarda un plan de cuotas y actualiza sus cuotas generadas y compromisos aún sin pagar desde `from`.
+    func savePlan(_ plan: InstallmentPlan, from month: YearMonth) throws {
+        try write { db in
+            var p = plan
+            try p.save(db)
+            let planId = p.id!
+            // Compromisos de meses desde `from`
+            let projections = try Projection.filter(Column("month") >= month).fetchAll(db)
+            for pr in projections {
+                guard let n = p.installmentNumber(in: pr.month) else {
+                    // Ya no aplica a ese mes: borrar compromiso y cuota si no se han pagado.
+                    try Commitment.filter(Column("projectionId") == pr.id! && Column("installmentPlanId") == planId).deleteAll(db)
+                    try CardExpense.filter(Column("installmentPlanId") == planId && Column("isPaid") == false
+                                           && Column("date") >= pr.month.firstDay && Column("date") <= pr.month.lastDay).deleteAll(db)
+                    continue
+                }
+                let name = "\(p.name) (\(n)/\(p.installmentCount))"
+                try Commitment.filter(Column("projectionId") == pr.id! && Column("installmentPlanId") == planId)
+                    .updateAll(db, Column("name").set(to: name), Column("amount").set(to: p.monthlyAmount))
+                let unpaid = try CardExpense.filter(Column("installmentPlanId") == planId && Column("isPaid") == false
+                                                    && Column("date") >= pr.month.firstDay && Column("date") <= pr.month.lastDay).fetchAll(db)
+                for var e in unpaid {
+                    if p.cardId == nil || e.cardId != p.cardId! {
+                        try e.delete(db)
+                        continue
+                    }
+                    e.amount = p.monthlyAmount
+                    e.reason = name
+                    e.recomputeCOP()
+                    try e.update(db)
+                }
+                try Self.syncCardCharges(db, month: pr.month, projectionId: pr.id!)
+            }
+        }
+    }
+
+    /// Borra un plan con sus cuotas y compromisos que no se hayan pagado.
+    func deletePlan(id: Int64) throws {
+        try write { db in
+            try CardExpense.filter(Column("installmentPlanId") == id && Column("isPaid") == false).deleteAll(db)
+            let commitments = try Commitment.filter(Column("installmentPlanId") == id).fetchAll(db)
+            for c in commitments {
+                let used = try Int.fetchOne(db, sql: "SELECT (SELECT COUNT(*) FROM cardAllocation WHERE commitmentId = ?) + (SELECT COUNT(*) FROM expense WHERE commitmentId = ?)", arguments: [c.id!, c.id!]) ?? 0
+                if used == 0 { try c.delete(db) }
+            }
+            try InstallmentPlan.deleteOne(db, id: id)
+        }
+    }
+
     func payCard(_ payment: CardPayment, markPaidThrough: DayDate?, pocketBalanceAfter: Int64? = nil) throws {
         try write { db in
             var p = payment
