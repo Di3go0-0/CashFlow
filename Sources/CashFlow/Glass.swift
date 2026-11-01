@@ -140,12 +140,14 @@ struct FloatingAddButton: View {
                     withAnimation(.bouncy(duration: 0.35)) { open.toggle() }
                 } label: {
                     Image(systemName: "plus")
-                        .font(.title2.weight(.semibold))
+                        .font(.title2.weight(.bold))
                         .rotationEffect(.degrees(open ? 45 : 0))
-                        .frame(width: 58, height: 58)
-                        .foregroundStyle(.primary)
+                        .frame(width: 30, height: 30)
+                        .padding(14)
                 }
-                .glassEffect(.regular.tint(Theme.accent).interactive(), in: .circle)
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .tint(Theme.accent)
                 .glassEffectID("plus", in: ns)
                 .accessibilityLabel(T("New expense"))
             }
@@ -164,10 +166,11 @@ struct FloatingAddButton: View {
         } label: {
             Label(title, systemImage: icon)
                 .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 6)
         }
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .buttonStyle(.glass)
+        .tint(.primary)
         .glassEffectID(c.rawValue, in: ns)
         .transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
     }
