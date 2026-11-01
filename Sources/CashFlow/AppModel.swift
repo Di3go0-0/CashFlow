@@ -30,7 +30,7 @@ final class AppModel {
     }
 
     /// Acento de la interfaz (vidrio, hero, aurora).
-    var accent: AccentChoice = .slate {
+    var accent: AccentChoice = .sage {
         didSet {
             Theme.current = accent
             try? db.setSetting(Setting.accentKey, accent.rawValue)
@@ -58,7 +58,7 @@ final class AppModel {
         remindersEnabled = ((try? db.setting(Setting.remindersKey)) ?? nil) == "1"
         hideAmounts = ((try? db.setting(Setting.hideAmountsKey)) ?? nil) == "1"
         MoneyFormat.hidden = hideAmounts
-        accent = ((try? db.setting(Setting.accentKey)) ?? nil).flatMap(AccentChoice.init(rawValue:)) ?? .slate
+        accent = ((try? db.setting(Setting.accentKey)) ?? nil).flatMap(AccentChoice.init(rawValue:)) ?? .sage
         Theme.current = accent
         reload()
         month = activeMonth

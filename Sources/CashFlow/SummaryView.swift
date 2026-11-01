@@ -277,19 +277,19 @@ struct HeroCard: View {
                 Button { month = month.next } label: { Image(systemName: "chevron.right") }
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(.primary)
             .sheet(isPresented: $jumping) { MonthJumpSheet(month: $month) }
             VStack(alignment: .leading, spacing: 2) {
-                Text(hidden ? T("Remaining, as a share of income") : T("Remaining this month")).font(.caption).foregroundStyle(.white.opacity(0.75))
+                Text(hidden ? T("Remaining, as a share of income") : T("Remaining this month")).font(.caption).foregroundStyle(.secondary)
                 Text(hidden ? percent(summary.remaining) : MoneyFormat.cop(summary.remaining))
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .foregroundStyle(summary.remaining < 0 ? Color(hex: 0xfecaca) : .white)
+                    .foregroundStyle(summary.remaining < 0 ? .red : .primary)
             }
             if let perDay = perDay {
                 Text(T("≈ %@ per day for the %d days left", MoneyFormat.cop(perDay.amount), perDay.days))
-                    .font(.caption).foregroundStyle(.white.opacity(0.85)).monospacedDigit()
+                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
             HStack(spacing: 0) {
                 heroStat(T("Income"), summary.income, isBase: true)
@@ -322,9 +322,9 @@ struct HeroCard: View {
 
     private func heroStat(_ title: String, _ amount: Int64, isBase: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption2).foregroundStyle(.white.opacity(0.7))
+            Text(title).font(.caption2).foregroundStyle(.secondary)
             Text(hidden ? (isBase ? "100%" : percent(amount)) : compactCOP(amount))
-                .font(.subheadline.weight(.semibold)).foregroundStyle(.white).monospacedDigit()
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.primary).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
