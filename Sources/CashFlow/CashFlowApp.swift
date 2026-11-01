@@ -18,6 +18,7 @@ struct CashFlowApp: App {
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var quick = QuickActions.shared
     @State private var quickSheet: QuickActions.Action?
     @State private var tab = 0
@@ -82,6 +83,14 @@ struct RootView: View {
             }
         }
         .sensoryFeedback(.success, trigger: model.toast) { _, new in new != nil }
+        .overlay {
+            if model.isLocked {
+                LockScreen().transition(.opacity)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background && model.lockEnabled { model.isLocked = true }
+        }
         .alert(T("Something went wrong"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }

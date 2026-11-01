@@ -29,6 +29,13 @@ final class AppModel {
         }
     }
 
+    /// Pedir Face ID (o código) al abrir la app y al volver del fondo.
+    var lockEnabled = false {
+        didSet { try? db.setSetting(Setting.lockKey, lockEnabled ? "1" : nil) }
+    }
+    /// La app está tapada por la pantalla de bloqueo.
+    var isLocked = false
+
     /// Acento de la interfaz (vidrio, hero, aurora).
     var accent: AccentChoice = .sage {
         didSet {
@@ -60,6 +67,8 @@ final class AppModel {
         MoneyFormat.hidden = hideAmounts
         accent = ((try? db.setting(Setting.accentKey)) ?? nil).flatMap(AccentChoice.init(rawValue:)) ?? .sage
         Theme.current = accent
+        lockEnabled = ((try? db.setting(Setting.lockKey)) ?? nil) == "1"
+        isLocked = lockEnabled
         reload()
         month = activeMonth
     }

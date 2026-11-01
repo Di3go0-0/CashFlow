@@ -40,6 +40,30 @@ struct SettingsView: View {
             } footer: {
                 Text(T("%@. Changes the glass, the hero card and the background glow.", model.accent.title))
             }
+            Section {
+                Toggle(isOn: Binding(
+                    get: { model.lockEnabled },
+                    set: { on in
+                        if on {
+                            Task {
+                                if await AppLock.authenticate(reason: T("Confirm to require %@ when opening CashFlow", AppLock.biometryName)) {
+                                    model.lockEnabled = true
+                                }
+                            }
+                        } else {
+                            model.lockEnabled = false
+                        }
+                    })) {
+                    Label(T("Require %@", AppLock.biometryName), systemImage: "faceid")
+                }
+                .disabled(!AppLock.isAvailable)
+            } header: {
+                Text(T("Privacy"))
+            } footer: {
+                Text(AppLock.isAvailable
+                     ? T("Asked when the app opens and when it comes back from the background. If %@ fails, the iPhone passcode works too.", AppLock.biometryName)
+                     : T("Set up Face ID or a passcode on the iPhone to use this."))
+            }
             Section(T("Language")) {
                 Picker(T("Language"), selection: $model.language) {
                     ForEach(AppLanguage.allCases, id: \.self) { l in

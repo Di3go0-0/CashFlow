@@ -14,6 +14,8 @@
 	<array>
 		<string>es</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Para desbloquear CashFlow al abrirla.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

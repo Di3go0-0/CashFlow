@@ -15,6 +15,14 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Passcode": "Código",
+        "Unlock with %@": "Desbloquear con %@",
+        "Unlock CashFlow": "Desbloquear CashFlow",
+        "Confirm to require %@ when opening CashFlow": "Confirma para pedir %@ al abrir CashFlow",
+        "Require %@": "Pedir %@",
+        "Privacy": "Privacidad",
+        "Asked when the app opens and when it comes back from the background. If %@ fails, the iPhone passcode works too.": "Se pide al abrir la app y al volver del fondo. Si %@ falla, también sirve el código del iPhone.",
+        "Set up Face ID or a passcode on the iPhone to use this.": "Configura Face ID o un código en el iPhone para usar esto.",
         "Sage": "Salvia",
         "Mist": "Bruma",
         "Lavender": "Lavanda",
@@ -422,6 +430,14 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Passcode": "Code",
+        "Unlock with %@": "Déverrouiller avec %@",
+        "Unlock CashFlow": "Déverrouiller CashFlow",
+        "Confirm to require %@ when opening CashFlow": "Confirmez pour exiger %@ à l'ouverture de CashFlow",
+        "Require %@": "Exiger %@",
+        "Privacy": "Confidentialité",
+        "Asked when the app opens and when it comes back from the background. If %@ fails, the iPhone passcode works too.": "Demandé à l'ouverture de l'app et au retour de l'arrière-plan. Si %@ échoue, le code de l'iPhone fonctionne aussi.",
+        "Set up Face ID or a passcode on the iPhone to use this.": "Configurez Face ID ou un code sur l'iPhone pour utiliser ceci.",
         "Sage": "Sauge",
         "Mist": "Brume",
         "Lavender": "Lavande",
