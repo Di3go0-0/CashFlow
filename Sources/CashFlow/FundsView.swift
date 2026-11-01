@@ -5,6 +5,7 @@ import CashFlowCore
 
 struct FundsView: View {
     @Environment(AppModel.self) private var model
+    @Namespace private var zoom
     @State private var showNew = false
 
     var body: some View {
@@ -19,6 +20,7 @@ struct FundsView: View {
                     NavigationLink(value: r.fund.id!) {
                         FundRow(report: r, index: i)
                     }
+                    .matchedTransitionSource(id: r.fund.id!, in: zoom)
                 }
                 .onMove { from, to in
                     var ordered = regular.map(\.fund)
@@ -64,7 +66,9 @@ struct FundsView: View {
         }
         .auroraList()
         .navigationTitle(T("Funds"))
-        .navigationDestination(for: Int64.self) { FundDetailView(fundId: $0) }
+        .navigationDestination(for: Int64.self) { id in
+            FundDetailView(fundId: id).navigationTransition(.zoom(sourceID: id, in: zoom))
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { LocalizedEditButton() }
             ToolbarItem(placement: .topBarTrailing) {
@@ -121,15 +125,18 @@ struct FundDetailView: View {
         if let r = report {
             List {
                 Section {
-                    MoneyRow(title: model.fundsAsOf > model.today ? T("Balance with all of %@", model.month.monthName) : T("Balance today"),
-                             amount: r.balance, emphasis: true, color: r.balance.balanceColor,
-                             subtitle: model.fundsAsOf > model.today ? T("Today: %@", MoneyFormat.cop(model.snapshot.balance(of: fundId, asOf: model.today))) : nil)
-                    MoneyRow(title: T("Contributed in %@", model.month.monthName), amount: r.contributedInMonth)
-                    MoneyRow(title: T("Spent in %@", model.month.monthName), amount: r.spentInMonth)
-                    if r.fund.resetsMonthly {
-                        MoneyRow(title: T("Left this month"), amount: r.remainingInMonth, color: r.remainingInMonth < 0 ? .red : .primary)
-                    }
-                    if r.fund.initialBalance != 0 {
+                    GlassStatCard(
+                        title: model.fundsAsOf > model.today ? T("Balance with all of %@", model.month.monthName) : T("Balance today"),
+                        value: r.balance,
+                        caption: model.fundsAsOf > model.today ? T("Today: %@", MoneyFormat.cop(model.snapshot.balance(of: fundId, asOf: model.today))) : nil,
+                        stats: [(T("In"), r.contributedInMonth), (T("Out"), r.spentInMonth)]
+                            + (r.fund.resetsMonthly ? [(T("Left this month"), r.remainingInMonth)] : [])
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+                if r.fund.initialBalance != 0 {
+                    Section {
                         MoneyRow(title: T("Initial balance"), amount: r.fund.initialBalance)
                     }
                 }
@@ -172,6 +179,7 @@ struct FundDetailView: View {
                     }
                 }
             }
+            .auroraList()
             .navigationTitle(r.fund.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -290,6 +298,7 @@ struct FundEditView: View {
                     }
                 }
             }
+            .auroraList()
             .navigationTitle(isNew ? T("New fund") : T("Edit fund"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -343,6 +352,7 @@ struct FundAdjustmentView: View {
                 }
                 MoneyRow(title: T("Balance today"), amount: model.snapshot.balance(of: fund.id!, asOf: model.today))
             }
+            .auroraList()
             .navigationTitle(fund.name)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { date = model.defaultDate }

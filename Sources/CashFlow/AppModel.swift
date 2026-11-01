@@ -29,6 +29,14 @@ final class AppModel {
         }
     }
 
+    /// Acento de la interfaz (vidrio, hero, aurora).
+    var accent: AccentChoice = .teal {
+        didSet {
+            Theme.current = accent
+            try? db.setSetting(Setting.accentKey, accent.rawValue)
+        }
+    }
+
     /// Modo discreto: los montos se ven como puntos y el resumen habla en porcentajes.
     var hideAmounts = false {
         didSet {
@@ -50,6 +58,8 @@ final class AppModel {
         remindersEnabled = ((try? db.setting(Setting.remindersKey)) ?? nil) == "1"
         hideAmounts = ((try? db.setting(Setting.hideAmountsKey)) ?? nil) == "1"
         MoneyFormat.hidden = hideAmounts
+        accent = ((try? db.setting(Setting.accentKey)) ?? nil).flatMap(AccentChoice.init(rawValue:)) ?? .teal
+        Theme.current = accent
         reload()
         month = activeMonth
     }

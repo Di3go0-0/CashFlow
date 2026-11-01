@@ -106,6 +106,7 @@ struct ExpensesView: View {
                         Text(T("One row per expense, with and without card, for %@.", model.month.displayName))
                     }
                 }
+                .auroraList()
                 .navigationTitle(T("CSV export"))
                 .navigationBarTitleDisplayMode(.inline)
             }
@@ -316,6 +317,7 @@ struct ExpenseEditView: View {
                     SourceBalanceRow(source: source)
                 }
             }
+            .auroraList()
             .navigationTitle(isNew ? T("New expense") : T("Expense"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {

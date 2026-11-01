@@ -239,6 +239,8 @@ struct MonthView: View {
                         model.perform { try model.db.setConsumablePaid(id: c.id!, paid: !c.isPaid, on: model.defaultDate) }
                     } label: {
                         Image(systemName: c.isPaid ? "checkmark.circle.fill" : "circle")
+                            .contentTransition(.symbolEffect(.replace))
+                            .symbolEffect(.bounce, value: c.isPaid)
                             .foregroundStyle(c.isPaid ? .green : .secondary)
                             .font(.title3)
                     }
@@ -475,6 +477,7 @@ struct IncomeEditView: View {
                     }
                 }
             }
+            .auroraList()
             .navigationTitle(detail.income.id == nil ? T("New income") : T("Income"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -517,6 +520,7 @@ struct ContributionEditView: View {
                     MoneyRow(title: T("Fund balance today"), amount: model.snapshot.balance(of: f.id!, asOf: model.today))
                 }
             }
+            .auroraList()
             .navigationTitle(T("Contribution"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -563,6 +567,7 @@ struct PayConsumableSheet: View {
                     Text(T("Creates the credit card expense and a top-up from the consumables pool. The item is marked as paid."))
                 }
             }
+            .auroraList()
             .navigationTitle(T("Pay %@ with card", item.name))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -608,6 +613,7 @@ struct ConsumableEditView: View {
                     ))
                 }
             }
+            .auroraList()
             .navigationTitle(item.id == nil ? T("New consumable") : T("Consumable"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -651,6 +657,7 @@ struct CommitmentEditView: View {
                     }
                 }
             }
+            .auroraList()
             .navigationTitle(commitment.kind == .debt ? T("Debt or installment") : T("Necessary expense"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -718,6 +725,7 @@ struct IncomeSourcesView: View {
                 }
             }
         }
+        .auroraList()
         .navigationTitle(T("Income sources"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

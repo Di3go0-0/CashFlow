@@ -751,4 +751,5 @@ public struct Setting: Codable, Hashable, Sendable, FetchableRecord, Persistable
     public static let languageKey = "ui.language"
     public static let remindersKey = "reminders.enabled"
     public static let hideAmountsKey = "ui.hideAmounts"
+    public static let accentKey = "ui.accent"
 }

@@ -51,7 +51,7 @@ struct RootView: View {
                 model.goToToday()
             }
         }
-        .id("\(model.language.rawValue)-\(model.hideAmounts)")
+        .id("\(model.language.rawValue)-\(model.hideAmounts)-\(model.accent.rawValue)")
         .tint(Theme.accent)
         .fontDesign(.rounded)
         .onChange(of: quick.pending, initial: true) { _, action in

@@ -15,6 +15,31 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var model = model
         List {
+            Section {
+                HStack(spacing: 14) {
+                    ForEach(AccentChoice.allCases) { a in
+                        Button {
+                            withAnimation(.snappy) { model.accent = a }
+                        } label: {
+                            ZStack {
+                                Circle().fill(a.accent).frame(width: 34, height: 34)
+                                if model.accent == a {
+                                    Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.white)
+                                }
+                            }
+                            .overlay(Circle().stroke(.primary.opacity(model.accent == a ? 0.5 : 0), lineWidth: 2).padding(-3))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(a.title)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text(T("Accent color"))
+            } footer: {
+                Text(T("%@. Changes the glass, the hero card and the background glow.", model.accent.title))
+            }
             Section(T("Language")) {
                 Picker(T("Language"), selection: $model.language) {
                     ForEach(AppLanguage.allCases, id: \.self) { l in
@@ -109,6 +134,7 @@ struct SettingsView: View {
                 LabeledContent(T("Version"), value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
             }
         }
+        .auroraList()
         .navigationTitle(T("Settings"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -183,6 +209,7 @@ struct PlansView: View {
                 model.perform { for id in ids { try model.db.deletePlan(id: id) } }
             }
         }
+        .auroraList()
         .navigationTitle(T("Installment purchases"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -240,6 +267,7 @@ struct PlanEditView: View {
                          : T("On a credit card the installment is charged on each closing day, covered from its month commitment, and the rest of the purchase uses up limit until billed."))
                 }
             }
+            .auroraList()
             .navigationTitle(plan.id == nil ? T("New installment purchase") : T("Installment purchase"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

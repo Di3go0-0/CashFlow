@@ -5,6 +5,7 @@ import CashFlowCore
 
 struct CardsView: View {
     @Environment(AppModel.self) private var model
+    @Namespace private var zoom
     @State private var showNew = false
 
     var body: some View {
@@ -25,12 +26,15 @@ struct CardsView: View {
                 NavigationLink(value: st.card.id!) {
                     CardSummaryRow(status: st, today: model.today)
                 }
+                .matchedTransitionSource(id: st.card.id!, in: zoom)
             }
         }
         .auroraList()
         .overlay(alignment: .bottomTrailing) { FloatingAddButton(preferCard: true) }
         .navigationTitle(T("Credit cards"))
-        .navigationDestination(for: Int64.self) { CardDetailView(cardId: $0) }
+        .navigationDestination(for: Int64.self) { id in
+            CardDetailView(cardId: id).navigationTransition(.zoom(sourceID: id, in: zoom))
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showNew = true } label: { Image(systemName: "plus") }
@@ -81,6 +85,7 @@ struct CardEditView: View {
                     }
                 }
             }
+            .auroraList()
             .navigationTitle(isNew ? T("New credit card") : T("Edit credit card"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -136,8 +141,19 @@ struct CardDetailView: View {
             let items = st.expenses.filter { cyc.contains($0.expense.date) }
             List {
                 Section {
-                    MoneyRow(title: T("Debt"), amount: st.debt, emphasis: true)
-                    MoneyRow(title: T("Available"), amount: st.available, subtitle: T("Limit %@", MoneyFormat.cop(st.card.creditLimit)))
+                    GlassStatCard(
+                        title: T("Debt"),
+                        value: st.debt,
+                        caption: T("Available %@ of %@", MoneyFormat.cop(st.available), MoneyFormat.cop(st.card.creditLimit)),
+                        stats: [(T("Payment pocket"), st.pocket.map { model.snapshot.balance(of: $0.id!, asOf: model.fundsAsOf) } ?? st.pocketBalance),
+                                (T("Due"), st.dueNow),
+                                (T("Closes in %d d", max(model.today.days(until: st.cycle.end), 0)), st.cycleTotal)],
+                        negativeIsBad: false
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+                Section {
                     if st.installmentsOutstanding > 0 {
                         MoneyRow(title: T("Installments not yet billed"), amount: st.installmentsOutstanding,
                                  subtitle: st.plans.map { T("%@: %d of %d", $0.name, $0.installmentCount - $0.billedInstallments(through: model.month), $0.installmentCount) }.joined(separator: " · "))
@@ -257,6 +273,7 @@ struct CardDetailView: View {
                     }
                 }
             }
+            .auroraList()
             .navigationTitle(st.card.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -424,6 +441,7 @@ struct CardExpenseEditView: View {
                     }
                 }
             }
+            .auroraList()
             .navigationTitle(isNew ? T("New credit card expense") : T("Credit card expense"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -498,6 +516,7 @@ struct AllocationEditView: View {
                 DayDatePicker(title: T("Date"), day: $allocation.date)
                 SourceBalanceRow(source: source)
             }
+            .auroraList()
             .navigationTitle(T("Top-up"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -617,6 +636,7 @@ struct CardPaymentView: View {
                     Text(T("Write what really stays in the pocket. If it differs from the computed value, the difference is recorded as a pocket reconciliation."))
                 }
             }
+            .auroraList()
             .navigationTitle(T("Payment to %@", status.card.name))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {

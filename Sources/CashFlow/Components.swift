@@ -185,6 +185,7 @@ struct MonthJumpSheet: View {
                 Spacer()
             }
             .padding()
+            .auroraList()
             .navigationTitle(T("Go to month"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(T("Close")) { dismiss() } } }
@@ -233,6 +234,7 @@ struct SetBalanceSheet: View {
                     Text(T("The difference is recorded on %@ as a manual movement so the balance matches what you really have.", model.reconciliationDate.shortDisplay))
                 }
             }
+            .auroraList()
             .navigationTitle(fund.name)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { target = computed }
@@ -282,6 +284,7 @@ struct FinishMonthSheet: View {
                     Text(T("Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. If this is the current month, the app moves on to %@.", model.month.next.monthName))
                 }
             }
+            .auroraList()
             .navigationTitle(T("Finish %@", model.month.monthName))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { for r in reports { targets[r.fund.id!] = r.balance } }
@@ -490,9 +493,11 @@ extension Int64 {
 }
 
 enum Theme {
-    static let accent = Color(hex: 0x0d9488)
-    /// Tinte del vidrio del hero: teal profundo para que el texto blanco lea bien sobre cualquier fondo.
-    static let heroTint = Color(hex: 0x0f766e).opacity(0.92)
+    /// Acento elegido en Ajustes. La app lo fija al arrancar y al cambiarlo.
+    nonisolated(unsafe) static var current: AccentChoice = .teal
+    static var accent: Color { current.accent }
+    /// Tinte del vidrio del hero y las tarjetas de detalle.
+    static var heroTint: Color { current.heroTint }
     static let heroGradient = LinearGradient(colors: [Color(hex: 0x0f766e), Color(hex: 0x134e4a)], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
