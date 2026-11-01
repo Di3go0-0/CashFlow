@@ -122,6 +122,7 @@ struct MonthSwitcher: View {
             }
             .buttonStyle(.borderless)
             .tint(.primary)
+            .simultaneousGesture(LongPressGesture().onEnded { _ in month = .current() })
             Spacer()
             Button { month = month.next } label: { Image(systemName: "chevron.right") }
                 .buttonStyle(.borderless)

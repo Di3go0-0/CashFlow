@@ -277,6 +277,7 @@ struct HeroCard: View {
                         Image(systemName: "chevron.up.chevron.down").font(.caption2)
                     }
                 }
+                .simultaneousGesture(LongPressGesture().onEnded { _ in month = .current() })
                 Spacer()
                 Button { month = month.next } label: { Image(systemName: "chevron.right") }
             }

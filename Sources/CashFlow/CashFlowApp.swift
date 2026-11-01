@@ -20,20 +20,34 @@ struct RootView: View {
     @Environment(\.openURL) private var openURL
     @State private var quick = QuickActions.shared
     @State private var quickSheet: QuickActions.Action?
+    @State private var tab = 0
+
+    /// Tocar otra vez la pestaña activa vuelve al mes en curso.
+    private var tabSelection: Binding<Int> {
+        Binding(
+            get: { tab },
+            set: { new in
+                if new == tab {
+                    model.month = .current()
+                } else {
+                    tab = new
+                }
+            })
+    }
 
     var body: some View {
         @Bindable var model = model
-        TabView {
+        TabView(selection: tabSelection) {
             NavigationStack { SummaryView() }
-                .tabItem { Label(T("Summary"), systemImage: "chart.pie") }
+                .tabItem { Label(T("Summary"), systemImage: "chart.pie") }.tag(0)
             NavigationStack { MonthView() }
-                .tabItem { Label(T("Month"), systemImage: "calendar") }
+                .tabItem { Label(T("Month"), systemImage: "calendar") }.tag(1)
             NavigationStack { FundsView() }
-                .tabItem { Label(T("Funds"), systemImage: "tray.2") }
+                .tabItem { Label(T("Funds"), systemImage: "tray.2") }.tag(2)
             NavigationStack { CardsView() }
-                .tabItem { Label(T("Credit cards"), systemImage: "creditcard") }
+                .tabItem { Label(T("Credit cards"), systemImage: "creditcard") }.tag(3)
             NavigationStack { ExpensesView() }
-                .tabItem { Label(T("Expenses"), systemImage: "cart") }
+                .tabItem { Label(T("Expenses"), systemImage: "cart") }.tag(4)
         }
         .id("\(model.language.rawValue)-\(model.hideAmounts)")
         .tint(Theme.accent)
