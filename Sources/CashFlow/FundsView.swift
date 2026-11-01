@@ -65,7 +65,7 @@ struct FundsView: View {
         .navigationTitle(T("Funds"))
         .navigationDestination(for: Int64.self) { FundDetailView(fundId: $0) }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { EditButton() }
+            ToolbarItem(placement: .topBarLeading) { LocalizedEditButton() }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showNew = true } label: { Image(systemName: "plus") }
             }

@@ -55,35 +55,42 @@ struct SummaryView: View {
             if s.committed > 0 || s.income > 0 {
                 Section(T("Where the money goes")) {
                     PlanDonutChart(summary: s, colors: Palette.series(scheme))
-                        .frame(height: 260)
                         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 }
             }
 
-            Section(T("Last 6 months")) {
-                IncomeSpentChart(points: history(), colors: Palette.series(scheme))
+            Section {
+                IncomeSpentChart(points: history(), colors: Palette.series(scheme), inProgress: model.activeMonth)
                     .frame(height: 220)
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-            }
-
-            Section(T("This month")) {
-                MoneyRow(title: T("Income"), amount: s.income,
-                         subtitle: s.pendingIncome > 0 ? T("Pending: %@", MoneyFormat.cop(s.pendingIncome)) : nil)
-                MoneyRow(title: T("Spent"), amount: s.spent, subtitle: T("Money that actually went out"))
-                MoneyRow(title: T("Saved"), amount: s.saved, color: .green)
-                if s.commitmentsUnpaid > 0 {
-                    MoneyRow(title: T("Commitments still to pay"), amount: s.commitmentsUnpaid, color: .secondary)
-                }
-                if s.consumablesTotal > 0 {
-                    MoneyRow(title: T("Left in consumables"), amount: s.consumablesPending,
-                             color: s.consumablesPending < 0 ? .red : .primary,
-                             subtitle: T("Pool %@ · unpaid items %@", MoneyFormat.cop(s.consumablesTotal), MoneyFormat.cop(s.consumablesUnpaid)))
+            } header: {
+                Text(T("Last 6 months"))
+            } footer: {
+                if history().contains(where: { $0.month == model.activeMonth }) {
+                    Text(T("%@ is still in progress, so its bars are lighter.", model.activeMonth.monthName))
                 }
             }
 
-            Section(T("Extra balance")) {
-                MoneyRow(title: T("Extra balance"), amount: s.extraBalance, subtitle: T("Income minus funds, consumables, debts and necessary"))
-                MoneyRow(title: T("Spent from extra"), amount: s.spentFromExtra)
+            if s.pendingIncome > 0 || s.commitmentsUnpaid > 0 || s.consumablesTotal > 0 {
+                Section(T("Still to settle")) {
+                    if s.pendingIncome > 0 {
+                        MoneyRow(title: T("Income still to come"), amount: s.pendingIncome, color: .secondary)
+                    }
+                    if s.commitmentsUnpaid > 0 {
+                        MoneyRow(title: T("To pay this month"), amount: s.commitmentsUnpaid, color: .secondary,
+                                 subtitle: T("Debts and necessary expenses without a payment yet"))
+                    }
+                    if s.consumablesTotal > 0 {
+                        MoneyRow(title: T("Pending consumables"), amount: s.consumablesUnpaid,
+                                 color: s.consumablesPending < 0 ? .red : .primary,
+                                 subtitle: T("Pool %@ · left in it %@", MoneyFormat.cop(s.consumablesTotal), MoneyFormat.cop(s.consumablesPending)))
+                    }
+                }
+            }
+
+            Section(T("Free to spend")) {
+                MoneyRow(title: T("Free to spend"), amount: s.extraBalance, subtitle: T("Income minus funds, consumables, debts and necessary"))
+                MoneyRow(title: T("Already spent from it"), amount: s.spentFromExtra)
                 MoneyRow(title: T("Remaining"), amount: s.remaining, emphasis: true, color: s.remaining < 0 ? .red : .primary)
                 if let projected = model.projectedRemaining {
                     MoneyRow(title: T("At this pace, month end"), amount: projected, color: projected < 0 ? .orange : .secondary,
@@ -95,10 +102,6 @@ struct SummaryView: View {
                 let reports = model.regularFundReports
                 if reports.isEmpty {
                     EmptyHint(text: T("Create your funds in the Funds tab."))
-                } else {
-                    FundBalancesChart(reports: reports, color: Palette.series(scheme)[0])
-                        .frame(height: CGFloat(reports.count) * 30 + 20)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 }
                 ForEach(Array(reports.enumerated()), id: \.element.id) { i, r in
                     FundRow(report: r, index: i)
@@ -172,24 +175,39 @@ struct PlanDonutChart: View {
     var body: some View {
         let items = slices
         let total = items.reduce(0) { $0 + $1.amount }
-        Chart(items) { s in
-            SectorMark(angle: .value(T("Amount"), s.amount), innerRadius: .ratio(0.62), angularInset: 1.5)
-                .cornerRadius(4)
-                .foregroundStyle(by: .value(T("Category"), s.name))
-        }
-        .chartForegroundStyleScale(domain: items.map(\.name), range: Array(colors.prefix(items.count)))
-        .chartLegend(position: .bottom, alignment: .center, spacing: 8)
-        .chartBackground { proxy in
-            GeometryReader { geo in
-                let frame = geo[proxy.plotFrame!]
-                VStack(spacing: 2) {
-                    Text(T("Income")).font(.caption).foregroundStyle(.secondary)
-                    Text(MoneyFormat.cop(summary.income)).font(.subheadline.weight(.semibold)).monospacedDigit()
-                    if total != summary.income {
-                        Text(T("plan %@", MoneyFormat.cop(total))).font(.caption2).foregroundStyle(.secondary)
+        VStack(spacing: 14) {
+            Chart(items) { s in
+                SectorMark(angle: .value(T("Amount"), s.amount), innerRadius: .ratio(0.62), angularInset: 1.5)
+                    .cornerRadius(4)
+                    .foregroundStyle(by: .value(T("Category"), s.name))
+            }
+            .chartForegroundStyleScale(domain: items.map(\.name), range: Array(colors.prefix(items.count)))
+            .chartLegend(.hidden)
+            .chartBackground { proxy in
+                GeometryReader { geo in
+                    let frame = geo[proxy.plotFrame!]
+                    VStack(spacing: 2) {
+                        Text(T("Income")).font(.caption).foregroundStyle(.secondary)
+                        Text(MoneyFormat.cop(summary.income)).font(.subheadline.weight(.semibold)).monospacedDigit()
+                        if total != summary.income {
+                            Text(T("plan %@", MoneyFormat.cop(total))).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .position(x: frame.midX, y: frame.midY)
+                }
+            }
+            .frame(height: 200)
+            VStack(spacing: 6) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { i, s in
+                    HStack(spacing: 8) {
+                        Circle().fill(colors[i % colors.count]).frame(width: 9, height: 9)
+                        Text(s.name).font(.subheadline)
+                        Spacer()
+                        Text(total > 0 ? "\(Int((Double(s.amount) / Double(total) * 100).rounded()))%" : "—")
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        MoneyText(amount: s.amount).font(.subheadline).frame(minWidth: 90, alignment: .trailing)
                     }
                 }
-                .position(x: frame.midX, y: frame.midY)
             }
         }
     }
@@ -199,11 +217,14 @@ struct PlanDonutChart: View {
 struct IncomeSpentChart: View {
     var points: [MonthPoint]
     var colors: [Color]
+    /// Mes que va en curso: sus barras se pintan más claras.
+    var inProgress: YearMonth? = nil
 
     private struct Bar: Identifiable {
         var month: String
         var series: String
         var amount: Int64
+        var light: Bool
         var id: String { month + series }
     }
 
@@ -211,14 +232,15 @@ struct IncomeSpentChart: View {
         let income = T("Income")
         let spent = T("Spent")
         let bars = points.flatMap { p in
-            [Bar(month: L10n.shortMonthName(p.month.month), series: income, amount: p.income),
-             Bar(month: L10n.shortMonthName(p.month.month), series: spent, amount: p.spent)]
+            [Bar(month: L10n.shortMonthName(p.month.month), series: income, amount: p.income, light: p.month == inProgress),
+             Bar(month: L10n.shortMonthName(p.month.month), series: spent, amount: p.spent, light: p.month == inProgress)]
         }
         Chart(bars) { b in
             BarMark(x: .value(T("Month"), b.month), y: .value(T("Amount"), b.amount), width: .ratio(0.6))
                 .cornerRadius(4)
                 .foregroundStyle(by: .value(T("Series"), b.series))
                 .position(by: .value(T("Series"), b.series))
+                .opacity(b.light ? 0.45 : 1)
         }
         .chartForegroundStyleScale(domain: [income, spent], range: [colors[0], colors[1]])
         .chartLegend(position: .top, alignment: .leading)
@@ -236,31 +258,6 @@ struct IncomeSpentChart: View {
     }
 }
 
-/// Barras horizontales con el saldo de cada fondo.
-struct FundBalancesChart: View {
-    var reports: [FundReport]
-    var color: Color
-
-    var body: some View {
-        Chart(reports) { r in
-            BarMark(x: .value(T("Balance"), r.balance), y: .value(T("Fund"), r.fund.name), height: .fixed(14))
-                .cornerRadius(4)
-                .foregroundStyle(r.balance < 0 ? Color.red : color)
-                .annotation(position: r.balance < 0 ? .leading : .trailing, spacing: 4) {
-                    Text(compactCOP(r.balance)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                }
-        }
-        .chartXAxis(.hidden)
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisValueLabel().font(.caption)
-            }
-        }
-        .chartXScale(domain: .automatic(includesZero: true))
-    }
-}
-
-/// Cabecera del Resumen: mes, restante grande y tres cifras clave.
 struct HeroCard: View {
     @Environment(AppModel.self) private var model
     @Binding var month: YearMonth
@@ -292,6 +289,10 @@ struct HeroCard: View {
                     .monospacedDigit()
                     .foregroundStyle(summary.remaining < 0 ? Color(hex: 0xfecaca) : .white)
             }
+            if let perDay = perDay {
+                Text(T("≈ %@ per day for the %d days left", MoneyFormat.cop(perDay.amount), perDay.days))
+                    .font(.caption).foregroundStyle(.white.opacity(0.85)).monospacedDigit()
+            }
             HStack(spacing: 0) {
                 heroStat(T("Income"), summary.income, isBase: true)
                 heroStat(T("Spent"), summary.spent)
@@ -304,6 +305,14 @@ struct HeroCard: View {
     }
 
     private var hidden: Bool { MoneyFormat.hidden }
+
+    /// Cuánto se puede gastar por día con lo que queda, solo en el mes del calendario.
+    private var perDay: (amount: Int64, days: Int)? {
+        let today = model.today
+        guard !hidden, month == today.yearMonth, summary.remaining > 0 else { return nil }
+        let days = max(month.daysInMonth - today.day + 1, 1)
+        return (summary.remaining / Int64(days), days)
+    }
 
     /// Porcentaje sobre el ingreso del mes, para el modo discreto.
     private func percent(_ amount: Int64) -> String {

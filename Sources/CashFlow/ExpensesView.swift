@@ -143,7 +143,7 @@ struct ExpensesView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
                             Text(c.name)
-                            Text(T("%d times", c.count)).font(.caption2).foregroundStyle(.secondary)
+                            Text(c.count == 1 ? T("Once") : T("%d times", c.count)).font(.caption2).foregroundStyle(.secondary)
                             Spacer()
                             MoneyText(amount: c.total)
                         }

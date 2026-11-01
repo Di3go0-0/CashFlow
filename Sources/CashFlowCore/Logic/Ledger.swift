@@ -77,7 +77,7 @@ public struct Snapshot: Sendable {
         if let c = consumable(consumableId) { return L10n.tr("Consumable: %@", c.name) }
         if fromConsumables { return L10n.tr("Consumables") }
         if let f = fund(fundId) { return f.name }
-        return L10n.tr("Extra balance")
+        return L10n.tr("Free to spend")
     }
 
     public func commitment(_ id: Int64?) -> Commitment? { id.flatMap { i in commitments.first { $0.id == i } } }

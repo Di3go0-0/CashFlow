@@ -142,7 +142,8 @@ struct CardDetailView: View {
                     }
                     Button { settingPocket = true } label: {
                         HStack {
-                            MoneyRow(title: T("Payment pocket"), amount: st.pocketBalance, color: st.pocketBalance < st.dueNow ? .orange : .primary,
+                            let pocketShown = st.pocket.map { model.snapshot.balance(of: $0.id!, asOf: model.fundsAsOf) } ?? st.pocketBalance
+                            MoneyRow(title: T("Payment pocket"), amount: pocketShown, color: pocketShown < st.dueNow ? .orange : .primary,
                                      subtitle: T("Tap to set the real balance"))
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                         }
@@ -199,7 +200,8 @@ struct CardDetailView: View {
                                  subtitle: rep.allocated < rep.charged ? T("Missing %@", MoneyFormat.cop(rep.charged - rep.allocated)) : nil)
                         if rep.payments.isEmpty {
                             if rep.unpaid > 0 {
-                                MoneyRow(title: T("Still unpaid"), amount: rep.unpaid, color: .orange)
+                                MoneyRow(title: T("Still unpaid"), amount: rep.unpaid, color: rep.allocated >= rep.charged ? .secondary : .orange,
+                                         subtitle: rep.allocated >= rep.charged ? T("Covered by the pocket") : nil)
                                 Button {
                                     payingCycle = cyc
                                 } label: {
@@ -220,7 +222,8 @@ struct CardDetailView: View {
                                 MoneyRow(title: T("Pocket after paying"), amount: after, emphasis: true, color: after < 0 ? .red : .primary)
                             }
                             if rep.unpaid > 0 {
-                                MoneyRow(title: T("Still unpaid"), amount: rep.unpaid, color: .orange)
+                                MoneyRow(title: T("Still unpaid"), amount: rep.unpaid, color: rep.allocated >= rep.charged ? .secondary : .orange,
+                                         subtitle: rep.allocated >= rep.charged ? T("Covered by the pocket") : nil)
                             }
                             Button {
                                 payingCycle = cyc
@@ -295,7 +298,7 @@ struct CardExpenseRow: View {
                     if e.isPaid {
                         Label(T("Paid"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                     } else if status.uncovered == 0 {
-                        Label(T("Covered"), systemImage: "shield.fill").foregroundStyle(.blue)
+                        Label(T("Covered"), systemImage: "shield.fill").foregroundStyle(Theme.accent)
                     } else {
                         Label(T("Missing %@", MoneyFormat.cop(status.uncovered)), systemImage: "exclamationmark.circle").foregroundStyle(.red)
                     }

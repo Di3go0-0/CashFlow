@@ -29,6 +29,17 @@ struct MonthView: View {
             incomesSection
 
             if let p = model.projection {
+                if model.monthIsEmpty(p), model.previousProjection != nil {
+                    Section {
+                        Button {
+                            model.bringEverythingFromPreviousMonth()
+                        } label: {
+                            Label(T("Copy everything from %@", model.month.previous.monthName), systemImage: "doc.on.doc")
+                        }
+                    } footer: {
+                        Text(T("Brings contributions, consumables, debts and necessary expenses at once. You can still bring each category on its own below."))
+                    }
+                }
                 contributionsSection(p)
                 consumablesSection(p)
                 commitmentsSection(p, kind: .debt, category: .debts, title: T("Debts and installments"), addLabel: T("Add debt"))
@@ -96,7 +107,7 @@ struct MonthView: View {
             }
         }
         .navigationTitle(T("Month"))
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { LocalizedEditButton() } }
         .sheet(item: $payingWithCard) { PayConsumableSheet(item: $0) }
         .sheet(item: $editingIncome) { IncomeEditView(detail: $0) }
         .sheet(item: $editingContribution) { ContributionEditView(contribution: $0) }
@@ -246,6 +257,12 @@ struct MonthView: View {
                     .tint(.primary)
                 }
                 .swipeActions(edge: .leading) {
+                    Button {
+                        model.perform { try model.db.setConsumablePaid(id: c.id!, paid: !c.isPaid, on: model.today) }
+                    } label: {
+                        Label(c.isPaid ? T("Mark unpaid") : T("Mark paid"), systemImage: c.isPaid ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                    }
+                    .tint(c.isPaid ? .gray : .green)
                     if !c.isPaid && !model.activeCards.isEmpty {
                         Button { payingWithCard = c } label: { Label(T("Pay with card"), systemImage: "creditcard") }.tint(Theme.accent)
                     }
@@ -327,7 +344,7 @@ struct MonthView: View {
                 MoneyRow(title: T("Commitments still to pay"), amount: s.commitmentsUnpaid, color: .secondary,
                          subtitle: T("Record each payment as an expense paid from its commitment"))
             }
-            MoneyRow(title: T("Extra balance"), amount: s.extraBalance, emphasis: true, color: s.extraBalance < 0 ? .red : .primary)
+            MoneyRow(title: T("Free to spend"), amount: s.extraBalance, emphasis: true, color: s.extraBalance < 0 ? .red : .primary)
             MoneyRow(title: T("Remaining today"), amount: s.remaining, subtitle: T("Extra balance minus what was already spent from it"))
         }
     }

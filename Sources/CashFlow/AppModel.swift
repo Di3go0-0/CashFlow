@@ -156,7 +156,7 @@ final class AppModel {
     var activeCards: [Card] { snapshot.cards.filter { !$0.isArchived } }
     var monthIncomes: [IncomeDetail] { snapshot.incomes.filter { $0.income.month == month } }
 
-    func fundName(_ id: Int64?) -> String { snapshot.fund(id)?.name ?? T("Extra balance") }
+    func fundName(_ id: Int64?) -> String { snapshot.fund(id)?.name ?? T("Free to spend") }
     func cardName(_ id: Int64?) -> String { snapshot.card(id)?.name ?? T("Credit card") }
     func sourceName(_ id: Int64?) -> String { snapshot.source(id)?.name ?? T("Source") }
 
@@ -189,6 +189,20 @@ final class AppModel {
 
     func bringFromPreviousMonth(_ category: ProjectionCategory) {
         perform { try db.copyFromPreviousMonth(category, to: month) }
+    }
+
+    /// El mes no tiene aportes, consumibles ni compromisos (salvo cuotas de planes): recién iniciado.
+    func monthIsEmpty(_ p: Projection) -> Bool {
+        contributions(of: p).isEmpty && consumables().isEmpty
+            && !snapshot.commitments.contains { $0.projectionId == p.id && $0.installmentPlanId == nil && $0.kind != .adjustment }
+    }
+
+    func bringEverythingFromPreviousMonth() {
+        perform {
+            for c in [ProjectionCategory.contributions, .consumables, .debts, .necessary] where previousMonthCount(c) > 0 {
+                try db.copyFromPreviousMonth(c, to: month)
+            }
+        }
     }
 
     /// Cuántos ítems de una categoría tiene el mes anterior, para habilitar el botón de traer.

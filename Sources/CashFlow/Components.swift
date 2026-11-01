@@ -302,6 +302,18 @@ struct FinishMonthSheet: View {
     }
 }
 
+/// Botón de edición en el idioma de la app (el del sistema sale en el idioma del teléfono).
+struct LocalizedEditButton: View {
+    @Environment(\.editMode) private var editMode
+
+    var body: some View {
+        let editing = editMode?.wrappedValue.isEditing == true
+        Button(editing ? T("Done") : T("Edit")) {
+            withAnimation { editMode?.wrappedValue = editing ? .inactive : .active }
+        }
+    }
+}
+
 /// Botón del ojo: oculta los montos y deja solo porcentajes.
 struct HideAmountsButton: View {
     @Environment(AppModel.self) private var model
