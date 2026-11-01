@@ -120,7 +120,9 @@ struct FundDetailView: View {
         if let r = report {
             List {
                 Section {
-                    MoneyRow(title: T("Balance today"), amount: r.balance, emphasis: true, color: r.balance.balanceColor)
+                    MoneyRow(title: model.fundsAsOf > model.today ? T("Balance with all of %@", model.month.monthName) : T("Balance today"),
+                             amount: r.balance, emphasis: true, color: r.balance.balanceColor,
+                             subtitle: model.fundsAsOf > model.today ? T("Today: %@", MoneyFormat.cop(model.snapshot.balance(of: fundId, asOf: model.today))) : nil)
                     MoneyRow(title: T("Contributed in %@", model.month.monthName), amount: r.contributedInMonth)
                     MoneyRow(title: T("Spent in %@", model.month.monthName), amount: r.spentInMonth)
                     if r.fund.resetsMonthly {

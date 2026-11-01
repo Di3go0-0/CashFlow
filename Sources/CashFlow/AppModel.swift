@@ -107,7 +107,7 @@ final class AppModel {
     }
 
     func setBalance(of fundId: Int64, to target: Int64) {
-        perform { try db.setBalance(of: fundId, to: target, on: today, reason: L10n.tr("Balance reconciliation")) }
+        perform { try db.setBalance(of: fundId, to: target, on: reconciliationDate, reason: L10n.tr("Balance reconciliation")) }
     }
 
     func report(_ error: Error) {
@@ -141,7 +141,12 @@ final class AppModel {
     // MARK: Derivados
 
     var summary: MonthSummary { snapshot.monthSummary(month) }
-    var fundReports: [FundReport] { snapshot.fundReports(asOf: today, month: month) }
+    /// Los saldos de fondos se muestran con todo lo del mes elegido: si es el mes en curso o uno futuro,
+    /// incluyen sus aportes aunque la fecha aún no llegue. Para meses pasados es el saldo de hoy.
+    var fundsAsOf: DayDate { max(today, month.lastDay) }
+    /// Fecha para un cuadre de saldo hecho mientras se ve el mes elegido.
+    var reconciliationDate: DayDate { max(today, month.firstDay) }
+    var fundReports: [FundReport] { snapshot.fundReports(asOf: fundsAsOf, month: month) }
     var regularFundReports: [FundReport] { fundReports.filter { !$0.fund.isCardPocket } }
     var cardStatuses: [CardStatus] { snapshot.cardStatuses(asOf: today) }
     var projection: Projection? { snapshot.projection(for: month) }

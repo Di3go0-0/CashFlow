@@ -219,7 +219,7 @@ struct SetBalanceSheet: View {
     var fund: Fund
     @State private var target: Int64 = 0
 
-    private var computed: Int64 { model.snapshot.balance(of: fund.id!, asOf: model.today) }
+    private var computed: Int64 { model.snapshot.balance(of: fund.id!, asOf: model.reconciliationDate) }
 
     var body: some View {
         NavigationStack {
@@ -230,7 +230,7 @@ struct SetBalanceSheet: View {
                     let diff = target - computed
                     MoneyRow(title: T("Adjustment"), amount: diff, showSign: true, color: diff == 0 ? .secondary : (diff > 0 ? .green : .red))
                 } footer: {
-                    Text(T("The difference is recorded today as a manual movement so the balance matches what you really have."))
+                    Text(T("The difference is recorded on %@ as a manual movement so the balance matches what you really have.", model.reconciliationDate.shortDisplay))
                 }
             }
             .navigationTitle(fund.name)

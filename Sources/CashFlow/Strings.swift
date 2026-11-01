@@ -15,6 +15,9 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Balance with all of %@": "Saldo con todo %@",
+        "Today: %@": "Hoy: %@",
+        "The difference is recorded on %@ as a manual movement so the balance matches what you really have.": "La diferencia se registra el %@ como movimiento manual para que el saldo quede como lo que tienes de verdad.",
         "Computed by the app": "Calculado por la app",
         "Real balance": "Saldo real",
         "Adjustment": "Ajuste",
@@ -391,6 +394,9 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Balance with all of %@": "Solde avec tout %@",
+        "Today: %@": "Aujourd'hui : %@",
+        "The difference is recorded on %@ as a manual movement so the balance matches what you really have.": "La différence est enregistrée le %@ comme mouvement manuel pour que le solde corresponde à ce que vous avez vraiment.",
         "Computed by the app": "Calculé par l'app",
         "Real balance": "Solde réel",
         "Adjustment": "Ajustement",
