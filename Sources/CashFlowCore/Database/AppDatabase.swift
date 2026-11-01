@@ -303,6 +303,9 @@ public final class AppDatabase: Sendable {
             try db.alter(table: "expense") { t in t.add(column: "budgetMonth", .text).indexed() }
             try db.alter(table: "cardExpense") { t in t.add(column: "budgetMonth", .text).indexed() }
         }
+        m.registerMigration("v10") { db in
+            try db.alter(table: "projection") { t in t.add(column: "closedAt", .text) }
+        }
         return m
     }
 }

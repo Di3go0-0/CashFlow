@@ -58,6 +58,16 @@ struct ExpensesView: View {
                 }
             }
 
+            if !query.isEmpty {
+                Section {
+                    HStack {
+                        Label(T("Filtering by “%@”", query), systemImage: "line.3.horizontal.decrease.circle")
+                        Spacer()
+                        Button(T("Clear filter")) { query = "" }
+                    }
+                }
+            }
+
             if filter == .all && query.isEmpty {
                 conceptsSection
             }
@@ -310,7 +320,10 @@ struct ExpenseEditView: View {
             .navigationTitle(isNew ? T("New expense") : T("Expense"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                if isNew { expense.date = model.defaultDate }
+                if isNew {
+                    expense.date = model.defaultDate
+                    expense.budgetMonth = model.defaultBudgetMonth
+                }
                 source = MoneySource(fundId: expense.fundId, fromConsumables: expense.fromConsumables, consumableId: expense.consumableId, commitmentId: expense.commitmentId)
             }
             .toolbar {

@@ -83,6 +83,19 @@ public struct Snapshot: Sendable {
     public func commitment(_ id: Int64?) -> Commitment? { id.flatMap { i in commitments.first { $0.id == i } } }
 
     /// Lo pagado contra un compromiso: gastos y abonos ligados a él.
+    /// Mes en curso para la app: el del calendario, o el siguiente si ese ya se dio por terminado.
+    public func activeMonth(today: DayDate) -> YearMonth {
+        let current = today.yearMonth
+        return projection(for: current)?.isClosed == true ? current.next : current
+    }
+
+    /// Un mes se puede terminar si ya pasó, o si es el del calendario y faltan dos días o menos para que acabe.
+    public func canClose(_ month: YearMonth, today: DayDate) -> Bool {
+        guard let p = projection(for: month), !p.isClosed else { return false }
+        if month < today.yearMonth { return true }
+        return month == today.yearMonth && today.day >= month.daysInMonth - 2
+    }
+
     /// Abonos que cuentan en un mes: los de gastos de tarjeta que pertenecen a ese mes.
     public func allocations(in month: YearMonth) -> [CardAllocation] {
         let ids = Set(cardExpenses.filter { $0.month == month }.compactMap(\.id))

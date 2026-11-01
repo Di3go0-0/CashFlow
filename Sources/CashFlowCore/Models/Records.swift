@@ -365,12 +365,17 @@ public struct Projection: Codable, Identifiable, Hashable, Sendable, FetchableRe
     public var id: Int64?
     public var month: YearMonth
     public var note: String
+    /// Día en que se dio por terminado el mes. Con esto la app pasa al siguiente como mes en curso.
+    public var closedAt: DayDate?
 
-    public init(id: Int64? = nil, month: YearMonth, note: String = "") {
+    public init(id: Int64? = nil, month: YearMonth, note: String = "", closedAt: DayDate? = nil) {
         self.id = id
         self.month = month
         self.note = note
+        self.closedAt = closedAt
     }
+
+    public var isClosed: Bool { closedAt != nil }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }

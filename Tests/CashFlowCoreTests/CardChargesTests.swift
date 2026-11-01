@@ -157,4 +157,26 @@ import GRDB
         // La tarjeta sigue usando la fecha real para el ciclo.
         #expect(snap.cardStatus(f.unica, asOf: d).cycleTotal == 30_000)
     }
+
+    @Test func finishingTheCurrentMonthMovesTheAppToTheNextOne() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        var snap = try f.db.snapshot()
+        #expect(!snap.canClose(f.nov, today: DayDate(year: 2026, month: 11, day: 27)))
+        #expect(snap.canClose(f.nov, today: DayDate(year: 2026, month: 11, day: 28)))
+        #expect(snap.canClose(f.nov, today: DayDate(year: 2026, month: 12, day: 3)))
+        #expect(snap.activeMonth(today: DayDate(year: 2026, month: 11, day: 29)) == f.nov)
+
+        try f.db.closeMonth(f.nov, on: DayDate(year: 2026, month: 11, day: 29))
+        snap = try f.db.snapshot()
+        #expect(snap.projection(for: f.nov)?.closedAt == DayDate(year: 2026, month: 11, day: 29))
+        #expect(snap.activeMonth(today: DayDate(year: 2026, month: 11, day: 29)) == f.dec)
+        #expect(!snap.canClose(f.nov, today: DayDate(year: 2026, month: 11, day: 30)))
+
+        try f.db.reopenMonth(f.nov)
+        snap = try f.db.snapshot()
+        #expect(snap.projection(for: f.nov)?.isClosed == false)
+        #expect(snap.activeMonth(today: DayDate(year: 2026, month: 11, day: 29)) == f.nov)
+        #expect(snap.commitments.filter { $0.kind == .adjustment }.isEmpty)
+    }
 }

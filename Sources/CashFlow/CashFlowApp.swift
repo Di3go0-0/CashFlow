@@ -28,7 +28,7 @@ struct RootView: View {
             get: { tab },
             set: { new in
                 if new == tab {
-                    model.month = .current()
+                    model.goToToday()
                 } else {
                     tab = new
                 }

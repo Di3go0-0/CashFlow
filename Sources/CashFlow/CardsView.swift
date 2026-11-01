@@ -405,6 +405,7 @@ struct CardExpenseEditView: View {
             .onAppear {
                 if isNew {
                     expense.date = model.defaultDate
+                    expense.budgetMonth = model.defaultBudgetMonth
                     if expense.cardId == 0, let c = model.activeCards.first { expense.cardId = c.id! }
                 }
             }

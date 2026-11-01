@@ -262,6 +262,7 @@ struct FundBalancesChart: View {
 
 /// Cabecera del Resumen: mes, restante grande y tres cifras clave.
 struct HeroCard: View {
+    @Environment(AppModel.self) private var model
     @Binding var month: YearMonth
     var summary: MonthSummary
     @State private var jumping = false
@@ -277,7 +278,7 @@ struct HeroCard: View {
                         Image(systemName: "chevron.up.chevron.down").font(.caption2)
                     }
                 }
-                .simultaneousGesture(LongPressGesture().onEnded { _ in month = .current() })
+                .simultaneousGesture(LongPressGesture().onEnded { _ in month = model.activeMonth })
                 Spacer()
                 Button { month = month.next } label: { Image(systemName: "chevron.right") }
             }

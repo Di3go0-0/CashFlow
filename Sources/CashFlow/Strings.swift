@@ -15,6 +15,16 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Finish %@": "Terminar %@",
+        "Finish month": "Terminar mes",
+        "Finish %@?": "¿Terminar %@?",
+        "Reopen %@": "Reabrir %@",
+        "Finished on %@": "Terminado el %@",
+        "Removes the closing adjustments and makes this month open again.": "Quita los ajustes de cierre y vuelve a abrir el mes.",
+        "Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched. If this is the current month, the app moves on to %@.": "Marca pagados los consumibles pendientes, deja el apartado en cero y agrega un ajuste de cierre para que el restante quede en cero. Los fondos no se tocan. Si es el mes en curso, la app pasa a %@.",
+        "You can finish %@ from %@.": "Puedes terminar %@ desde el %@.",
+        "Filtering by “%@”": "Filtrando por “%@”",
+        "Clear filter": "Quitar filtro",
         "Counts for %@": "Cuenta para %@",
         "Counts for": "Cuenta para",
         "%@ (month of the date)": "%@ (mes de la fecha)",
@@ -361,6 +371,16 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Finish %@": "Terminer %@",
+        "Finish month": "Terminer le mois",
+        "Finish %@?": "Terminer %@ ?",
+        "Reopen %@": "Rouvrir %@",
+        "Finished on %@": "Terminé le %@",
+        "Removes the closing adjustments and makes this month open again.": "Retire les ajustements de clôture et rouvre le mois.",
+        "Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched. If this is the current month, the app moves on to %@.": "Marque les consommables en attente comme payés, met la réserve à zéro et ajoute un ajustement de clôture pour que le reste soit nul. Les fonds ne sont pas touchés. Si c'est le mois en cours, l'app passe à %@.",
+        "You can finish %@ from %@.": "Vous pourrez terminer %@ à partir du %@.",
+        "Filtering by “%@”": "Filtre : « %@ »",
+        "Clear filter": "Effacer le filtre",
         "Counts for %@": "Compte pour %@",
         "Counts for": "Compte pour",
         "%@ (month of the date)": "%@ (mois de la date)",

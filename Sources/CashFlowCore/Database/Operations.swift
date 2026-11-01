@@ -156,9 +156,13 @@ public extension AppDatabase {
     /// Cierra un mes pasado sin tocar los fondos: marca pagados los consumibles pendientes, deja el apartado
     /// de consumibles en cero y agrega un ajuste de cierre para que el restante quede en cero.
     /// Idempotente: si ya hay ajuste de cierre, lo recalcula.
-    func closeMonth(_ month: YearMonth, label: String = "Month close") throws {
-        guard let p = try snapshot().projection(for: month) else { return }
+    /// Termina un mes: consumibles pagados, apartado y restante en cero, y la bandera `closedAt`.
+    /// Si es el mes en curso, a partir de ahí la app trata el siguiente como mes en curso.
+    func closeMonth(_ month: YearMonth, label: String = "Month close", on date: DayDate? = nil) throws {
+        guard var p = try snapshot().projection(for: month) else { return }
         try write { db in
+            p.closedAt = date ?? month.lastDay
+            try p.update(db)
             try Commitment.filter(Column("projectionId") == p.id! && Column("kind") == CommitmentKind.adjustment.rawValue).deleteAll(db)
             try Consumable.filter(Column("projectionId") == p.id! && Column("isAdjustment") == true).deleteAll(db)
             try Consumable.filter(Column("projectionId") == p.id! && Column("isPaid") == false)
@@ -178,6 +182,17 @@ public extension AppDatabase {
                 var cm = Commitment(projectionId: p.id!, kind: .adjustment, name: label, amount: s.remaining, date: month.lastDay)
                 try cm.insert(db)
             }
+        }
+    }
+
+    /// Deshace el cierre: quita los ajustes y la bandera. Los consumibles marcados pagados se quedan así.
+    func reopenMonth(_ month: YearMonth) throws {
+        guard var p = try snapshot().projection(for: month) else { return }
+        try write { db in
+            p.closedAt = nil
+            try p.update(db)
+            try Commitment.filter(Column("projectionId") == p.id! && Column("kind") == CommitmentKind.adjustment.rawValue).deleteAll(db)
+            try Consumable.filter(Column("projectionId") == p.id! && Column("isAdjustment") == true).deleteAll(db)
         }
     }
 

@@ -50,13 +50,28 @@ struct MonthView: View {
                     }
                 }
                 resultSection
-                if model.month < .current() {
+                if model.isMonthClosed {
+                    Section {
+                        Button { model.perform { try model.db.reopenMonth(model.month) } } label: {
+                            Label(T("Reopen %@", model.month.monthName), systemImage: "lock.open")
+                        }
+                    } header: {
+                        Label(T("Finished on %@", (model.projection?.closedAt ?? model.month.lastDay).longDisplay), systemImage: "checkmark.seal.fill")
+                    } footer: {
+                        Text(T("Removes the closing adjustments and makes this month open again."))
+                    }
+                } else if model.snapshot.canClose(model.month, today: model.today) {
                     Section {
                         Button { confirmClose = true } label: {
-                            Label(T("Close %@", model.month.monthName), systemImage: "lock")
+                            Label(T("Finish %@", model.month.monthName), systemImage: "lock")
                         }
                     } footer: {
-                        Text(T("Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched."))
+                        Text(T("Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched. If this is the current month, the app moves on to %@.", model.month.next.monthName))
+                    }
+                } else if model.month == model.today.yearMonth {
+                    Section {
+                        Label(T("You can finish %@ from %@.", model.month.monthName, DayDate(year: model.month.year, month: model.month.month, day: model.month.daysInMonth - 2).shortDisplay), systemImage: "lock")
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if model.isFutureMonth {
@@ -91,8 +106,8 @@ struct MonthView: View {
         .confirmationDialog(T("Undo starting %@?", model.month.monthName), isPresented: $confirmDelete, titleVisibility: .visible) {
             Button(T("Undo"), role: .destructive) { model.deleteMonth() }
         }
-        .confirmationDialog(T("Close %@?", model.month.monthName), isPresented: $confirmClose, titleVisibility: .visible) {
-            Button(T("Close month")) { model.perform { try model.db.closeMonth(model.month, label: T("Month close")) } }
+        .confirmationDialog(T("Finish %@?", model.month.monthName), isPresented: $confirmClose, titleVisibility: .visible) {
+            Button(T("Finish month")) { model.closeMonth() }
         }
     }
 

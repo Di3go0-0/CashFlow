@@ -51,6 +51,7 @@ final class AppModel {
         hideAmounts = ((try? db.setting(Setting.hideAmountsKey)) ?? nil) == "1"
         MoneyFormat.hidden = hideAmounts
         reload()
+        month = activeMonth
     }
 
     convenience init() {
@@ -72,6 +73,11 @@ final class AppModel {
             if snapshot.projection(for: current) == nil {
                 try db.startMonth(current)
             }
+            // Si el mes del calendario ya se terminó, el siguiente es el mes en curso y debe existir.
+            let active = snapshot.activeMonth(today: today)
+            if active != current, snapshot.projection(for: active) == nil {
+                try db.startMonth(active)
+            }
             // Cuotas de manejo y cuotas de planes de cada corte, por si cambió la tarjeta o el plan.
             try db.syncCardCharges()
             snapshot = try db.snapshot()
@@ -82,10 +88,23 @@ final class AppModel {
         }
     }
 
+    /// Mes en curso para la app: el del calendario, o el siguiente si ya se dio por terminado.
+    var activeMonth: YearMonth { snapshot.activeMonth(today: today) }
     /// Lo que se edita en el mes en curso también actualiza los montos sugeridos.
-    var editsTemplate: Bool { month == .current() }
-    var isCurrentMonth: Bool { month == .current() }
-    var isFutureMonth: Bool { month > .current() }
+    var editsTemplate: Bool { month == activeMonth }
+    var isCurrentMonth: Bool { month == activeMonth }
+    var isFutureMonth: Bool { month > activeMonth }
+    var isMonthClosed: Bool { projection?.isClosed == true }
+
+    func goToToday() { month = activeMonth }
+
+    /// Termina el mes elegido y, si era el mes en curso, pasa al siguiente.
+    func closeMonth() {
+        let m = month
+        if perform({ try db.closeMonth(m, label: T("Month close"), on: today) }) {
+            month = activeMonth
+        }
+    }
 
     func report(_ error: Error) {
         errorMessage = String(describing: error)
@@ -181,9 +200,14 @@ final class AppModel {
         return activeFunds.first { !used.contains($0.id!) } ?? activeFunds.first
     }
 
-    /// Fecha por defecto para un registro nuevo: hoy si estamos en el mes elegido, si no el primer día.
+    /// Fecha por defecto para un registro nuevo: hoy si estamos en el mes en curso o en el del calendario, si no el primer día.
     var defaultDate: DayDate {
-        month.contains(today) ? today : month.firstDay
+        (month == activeMonth || month.contains(today)) ? today : month.firstDay
+    }
+
+    /// Si la fecha por defecto cae en otro mes (compra de fin de mes para el mes que ya está en curso), el gasto cuenta para el mes elegido.
+    var defaultBudgetMonth: YearMonth? {
+        defaultDate.yearMonth == month ? nil : month
     }
 
     /// Deja en el App Group lo que muestra el widget y le pide que se actualice.

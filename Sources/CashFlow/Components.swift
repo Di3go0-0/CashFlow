@@ -106,6 +106,7 @@ struct DayDatePicker: View {
 }
 
 struct MonthSwitcher: View {
+    @Environment(AppModel.self) private var model
     @Binding var month: YearMonth
     @State private var jumping = false
 
@@ -122,7 +123,7 @@ struct MonthSwitcher: View {
             }
             .buttonStyle(.borderless)
             .tint(.primary)
-            .simultaneousGesture(LongPressGesture().onEnded { _ in month = .current() })
+            .simultaneousGesture(LongPressGesture().onEnded { _ in month = model.activeMonth })
             Spacer()
             Button { month = month.next } label: { Image(systemName: "chevron.right") }
                 .buttonStyle(.borderless)
@@ -155,7 +156,7 @@ struct MonthJumpSheet: View {
                     ForEach(1...12, id: \.self) { m in
                         let ym = YearMonth(year: year, month: m)
                         let selected = ym == month
-                        let isNow = ym == .current()
+                        let isNow = ym == model.activeMonth
                         Button {
                             month = ym
                             dismiss()
@@ -174,7 +175,7 @@ struct MonthJumpSheet: View {
                     }
                 }
                 Button {
-                    month = .current()
+                    month = model.activeMonth
                     dismiss()
                 } label: {
                     Label(T("Go to today"), systemImage: "calendar.badge.clock")
