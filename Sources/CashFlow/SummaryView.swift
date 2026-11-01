@@ -264,18 +264,25 @@ struct FundBalancesChart: View {
 struct HeroCard: View {
     @Binding var month: YearMonth
     var summary: MonthSummary
+    @State private var jumping = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Button { month = month.previous } label: { Image(systemName: "chevron.left") }
                 Spacer()
-                Text(month.displayName).font(.subheadline.weight(.semibold))
+                Button { jumping = true } label: {
+                    HStack(spacing: 4) {
+                        Text(month.displayName).font(.subheadline.weight(.semibold))
+                        Image(systemName: "chevron.up.chevron.down").font(.caption2)
+                    }
+                }
                 Spacer()
                 Button { month = month.next } label: { Image(systemName: "chevron.right") }
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.white.opacity(0.9))
+            .sheet(isPresented: $jumping) { MonthJumpSheet(month: $month) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(hidden ? T("Remaining, as a share of income") : T("Remaining this month")).font(.caption).foregroundStyle(.white.opacity(0.75))
                 Text(hidden ? percent(summary.remaining) : MoneyFormat.cop(summary.remaining))
