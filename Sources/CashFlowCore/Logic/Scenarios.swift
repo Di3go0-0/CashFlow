@@ -6,7 +6,7 @@ import GRDB
 // Después se puede aplicar a un mes futuro.
 
 public enum ScenarioLineKind: String, Codable, Sendable, CaseIterable {
-    case contribution, consumable, debt, necessary
+    case income, contribution, consumable, debt, necessary
 }
 
 public struct Scenario: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
@@ -86,7 +86,9 @@ public extension Snapshot {
     func scenarioSummary(_ s: Scenario) -> ScenarioSummary {
         let ls = lines(of: s.id!).filter(\.enabled)
         func sum(_ k: ScenarioLineKind) -> Int64 { ls.filter { $0.kind == k }.reduce(0) { $0 + $1.amount } }
-        return ScenarioSummary(income: s.income, contributions: sum(.contribution), consumables: sum(.consumable),
+        // El ingreso son sus fuentes; si el escenario no tiene líneas de ingreso, vale el monto directo.
+        let income = ls.contains { $0.kind == .income } ? sum(.income) : s.income
+        return ScenarioSummary(income: income, contributions: sum(.contribution), consumables: sum(.consumable),
                                debts: sum(.debt), necessary: sum(.necessary))
     }
 }
@@ -104,10 +106,23 @@ public extension AppDatabase {
             if let last = byMonth.keys.max() { income = byMonth[last]!.reduce(0) { $0 + $1.net } }
         }
         let base = snap.projection(for: month) ?? snap.projections.filter { $0.month <= month }.max { $0.month < $1.month }
+        // Fuentes de ingreso como líneas: las recurrentes con su plantilla, o los ingresos del último mes con datos.
+        var incomeLines: [(String, Int64)] = snap.sources.filter { $0.isRecurring && !$0.isArchived }
+            .map { ($0.name, $0.templateNet ?? $0.templateGross ?? 0) }.filter { $0.1 > 0 }
+        if incomeLines.isEmpty {
+            let byMonth = Dictionary(grouping: snap.incomes.filter { $0.income.status == .confirmed }, by: \.income.month)
+            if let last = byMonth.keys.max() {
+                incomeLines = byMonth[last]!.map { (snap.source($0.income.sourceId)?.name ?? "Income", $0.net) }
+            }
+        }
         return try write { db in
             var s = Scenario(name: name, income: income, createdAt: today)
             try s.insert(db)
             var order = 0
+            for (n, a) in incomeLines {
+                var l = ScenarioLine(scenarioId: s.id!, kind: .income, name: n, amount: a, sortOrder: order)
+                try l.insert(db); order += 1
+            }
             for f in snap.funds where !f.isArchived && !f.isCardPocket {
                 let amount = base.flatMap { p in snap.contributions.first { $0.projectionId == p.id && $0.fundId == f.id }?.amount } ?? f.defaultContribution
                 guard amount > 0 || f.defaultContribution > 0 else { continue }
@@ -158,6 +173,8 @@ public extension AppDatabase {
             var order = 0
             for l in lines {
                 switch l.kind {
+                case .income:
+                    continue
                 case .contribution:
                     guard let fundId = l.fundId else { continue }
                     var c = Contribution(projectionId: p.id!, fundId: fundId, amount: l.amount, date: month.firstDay)

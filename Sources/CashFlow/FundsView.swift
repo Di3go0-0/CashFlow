@@ -308,6 +308,7 @@ struct FundEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(isNew ? T("New fund") : T("Edit fund"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -362,6 +363,7 @@ struct FundAdjustmentView: View {
                 MoneyRow(title: T("Balance today"), amount: model.snapshot.balance(of: fund.id!, asOf: model.today))
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(fund.name)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { date = model.defaultDate }

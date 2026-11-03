@@ -318,6 +318,7 @@ struct ExpenseEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(isNew ? T("New expense") : T("Expense"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {

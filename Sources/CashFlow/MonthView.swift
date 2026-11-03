@@ -543,6 +543,7 @@ struct IncomeEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(detail.income.id == nil ? T("New income") : T("Income"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -586,6 +587,7 @@ struct ContributionEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(T("Contribution"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -633,6 +635,7 @@ struct PayConsumableSheet: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(T("Pay %@ with card", item.name))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -679,6 +682,7 @@ struct ConsumableEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(item.id == nil ? T("New bill") : T("Bill"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -723,6 +727,7 @@ struct CommitmentEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(commitment.kind == .debt ? T("Debt or installment") : T("Necessary expense"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

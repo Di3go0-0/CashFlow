@@ -15,6 +15,11 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Nothing here yet.": "Aún no hay nada aquí.",
+        "Balance today: %@": "Saldo hoy: %@",
+        "%@ of income": "%@ del ingreso",
+        "Counts in the scenario": "Cuenta en el escenario",
+        "Suggested contribution: %@": "Aporte sugerido: %@",
         "Distribution": "Distribución",
         "Committed %@ of the income · %@ free": "Comprometido %@ del ingreso · %@ libre",
         "Projection": "Proyección",
@@ -455,6 +460,11 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Nothing here yet.": "Rien ici pour l'instant.",
+        "Balance today: %@": "Solde aujourd'hui : %@",
+        "%@ of income": "%@ du revenu",
+        "Counts in the scenario": "Compte dans le scénario",
+        "Suggested contribution: %@": "Contribution suggérée : %@",
         "Distribution": "Répartition",
         "Committed %@ of the income · %@ free": "Engagé %@ du revenu · %@ libre",
         "Projection": "Projection",

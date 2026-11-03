@@ -86,6 +86,7 @@ struct CardEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(isNew ? T("New credit card") : T("Edit credit card"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -444,6 +445,7 @@ struct CardExpenseEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(isNew ? T("New credit card expense") : T("Credit card expense"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -519,6 +521,7 @@ struct AllocationEditView: View {
                 SourceBalanceRow(source: source)
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(T("Top-up"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -639,6 +642,7 @@ struct CardPaymentView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(T("Payment to %@", status.card.name))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {

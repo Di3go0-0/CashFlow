@@ -225,10 +225,13 @@ import GRDB
         var motoLine = snap.lines(of: s.id!).first { $0.fundId == f.moto.id }!
         motoLine.enabled = false
         try f.db.saveScenarioLine(motoLine)
-        var edited = s; edited.income = 4_500_000
-        try f.db.saveScenario(edited)
+        // El ingreso son sus fuentes: subir la del empleador.
+        var incomeLine = snap.lines(of: s.id!).first { $0.kind == .income }!
+        #expect(incomeLine.name == "Employer" && incomeLine.amount == 4_000_000)
+        incomeLine.amount = 4_500_000
+        try f.db.saveScenarioLine(incomeLine)
         snap = try f.db.snapshot()
-        sum = snap.scenarioSummary(edited)
+        sum = snap.scenarioSummary(s)
         #expect(sum.contributions == 980_000 && sum.free == 4_500_000 - 1_280_000)
 
         try f.db.applyScenario(id: s.id!, to: f.dec)
@@ -236,5 +239,23 @@ import GRDB
         let dec = snap.monthSummary(f.dec)
         #expect(dec.contributions == 980_000 && dec.necessary == 300_000)
         #expect(snap.contributions.filter { f.dec.contains($0.date) }.count == 2)
+    }
+}
+
+@Suite struct ScenarioEditTests {
+    @Test func renamingAndEditingLinesPersists() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let s = try f.db.createScenario(name: "Plan", basedOn: f.nov, today: DayDate(year: 2026, month: 11, day: 5))
+        var renamed = s; renamed.name = "Plan B"
+        try f.db.saveScenario(renamed)
+        var line = try f.db.snapshot().lines(of: s.id!).first { $0.kind == .contribution }!
+        line.name = "Custom"; line.amount = 123_000
+        try f.db.saveScenarioLine(line)
+        try f.db.saveScenarioLine(ScenarioLine(scenarioId: s.id!, kind: .income, name: "Side job", amount: 500_000))
+        let snap = try f.db.snapshot()
+        #expect(snap.scenarios.first { $0.id == s.id }?.name == "Plan B")
+        #expect(snap.lines(of: s.id!).contains { $0.name == "Custom" && $0.amount == 123_000 })
+        #expect(snap.scenarioSummary(renamed).income == 500_000)
     }
 }

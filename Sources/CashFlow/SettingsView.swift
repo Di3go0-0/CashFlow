@@ -292,6 +292,7 @@ struct PlanEditView: View {
                 }
             }
             .auroraList()
+            .keyboardDismissal()
             .navigationTitle(plan.id == nil ? T("New installment purchase") : T("Installment purchase"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

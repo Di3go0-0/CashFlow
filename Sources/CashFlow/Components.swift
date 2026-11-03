@@ -326,6 +326,30 @@ struct FinishMonthSheet: View {
     }
 }
 
+#if canImport(UIKit)
+import UIKit
+/// Cierra el teclado desde cualquier parte (los campos numéricos no tienen tecla Return).
+func hideKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+}
+#else
+func hideKeyboard() {}
+#endif
+
+extension View {
+    /// Barra sobre el teclado con "Done" y cierre al desplazar la lista.
+    func keyboardDismissal() -> some View {
+        self
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(T("Done")) { hideKeyboard() }
+                }
+            }
+    }
+}
+
 /// Botón de edición en el idioma de la app (el del sistema sale en el idioma del teléfono).
 struct LocalizedEditButton: View {
     @Environment(\.editMode) private var editMode
