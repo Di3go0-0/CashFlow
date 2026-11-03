@@ -5,11 +5,22 @@
 <h1 align="center">CashFlow</h1>
 
 <p align="center">
+  <a href="https://github.com/Di3go0-0/CashFlow/actions/workflows/tests.yml"><img src="https://github.com/Di3go0-0/CashFlow/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
+  <img src="https://img.shields.io/badge/iOS-26-000000?logo=apple&logoColor=white" alt="iOS 26">
+  <img src="https://img.shields.io/badge/license-MIT-2f5d50" alt="MIT">
+</p>
+
+<p align="center">
   App personal de finanzas para iPhone. Reemplaza mi sistema anterior de cuentas por bolsillos.<br>
   Swift 6 · SwiftUI · GRDB · compilada e instalada desde Arch Linux con <a href="https://xtool.sh">xtool</a>, sin Mac.
 </p>
 
 ---
+
+## Capturas
+
+<!-- Pendientes: Resumen, Mes, Tarjeta de crédito, Modo discreto -->
 
 ## Qué hace
 
@@ -29,7 +40,6 @@ La app sigue el mismo sistema que usaba en la sistema anterior: el ingreso del m
 | `Sources/CashFlowCore` | Modelos, esquema SQLite con migraciones, operaciones compuestas, cálculos en memoria (`Snapshot`), ciclos de tarjeta, dinero y fechas. Sin SwiftUI, se prueba en Linux. |
 | `Sources/CashFlow` | La app SwiftUI. `AppModel` carga un `Snapshot` completo tras cada escritura. |
 | `Tests/CashFlowCoreTests` | Swift Testing: lógica del mes, tarjetas, planes de cuotas, cierre, migración desde el esquema v1. |
-| `Tools/Seed` | Herramienta de línea de comandos para cargar meses históricos sobre una copia de la base y para mantenimiento (`close`, `relink`, `migrate`, `sync`). |
 
 Reglas que sostienen todo:
 
@@ -50,6 +60,12 @@ xtool dev           # compila, firma e instala en el iPhone
 
 Con Apple ID gratuito la firma caduca cada siete días; reinstalar no borra datos. Por la misma razón no hay widget ni App Groups.
 
+## Por qué así
+
+- **Sin Mac**: todo el ciclo (compilar, firmar, instalar, leer la base del teléfono) corre en Linux con xtool y libimobiledevice. Eso descartó SwiftData, App Intents y widgets, y llevó a GRDB, un URL scheme para Atajos y una herramienta propia para tocar la base.
+- **Núcleo probado sin interfaz**: `CashFlowCore` no importa SwiftUI, así que `swift test` corre en Linux y en CI. Las reglas de negocio (doble conteo, ciclos, cierre de mes, migraciones) tienen pruebas.
+- **Datos reales desde el día uno**: la app se construyó encima de meses históricos cargados desde la sistema anterior y cuadrados contra los extractos del banco.
+
 ## Estado
 
-Beta personal en uso diario, versión `0.0.1` mientras dure la beta. El detalle de las decisiones de dominio y del flujo de trabajo está en [`CLAUDE.md`](CLAUDE.md) y el historial de fases en [`PLAN.md`](PLAN.md).
+Beta personal en uso diario, versión `0.0.1` mientras dure la beta. Las decisiones de dominio están en [`CLAUDE.md`](CLAUDE.md) y el diseño en [`PLAN.md`](PLAN.md). Licencia [MIT](LICENSE).

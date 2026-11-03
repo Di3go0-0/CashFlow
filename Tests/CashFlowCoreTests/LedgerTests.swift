@@ -8,7 +8,7 @@ struct Fixture {
     let db: AppDatabase
     let nov = YearMonth(year: 2026, month: 11)
     let dec = YearMonth(year: 2026, month: 12)
-    var linktic: IncomeSource
+    var employer: IncomeSource
     var moto: Fund
     var compras: Fund
     var consumibles: Fund
@@ -28,7 +28,7 @@ struct Fixture {
             var k = k0; try k.insert(db)
             return (s, m, c, k)
         }
-        linktic = s; moto = m; compras = c; consumibles = k
+        employer = s; moto = m; compras = c; consumibles = k
         unica = try db.createCard(Card(name: "Crédito", creditLimit: 4_500_000, cutDay: 15, payDay: 5))
     }
 }
@@ -39,7 +39,7 @@ struct Fixture {
         // Ingreso de octubre detallado para que noviembre lo copie.
         let oct = YearMonth(year: 2026, month: 10)
         let octIncome = IncomeDetail(
-            income: Income(sourceId: f.linktic.id!, month: oct, date: oct.firstDay, grossAmount: 4_500_000),
+            income: Income(sourceId: f.employer.id!, month: oct, date: oct.firstDay, grossAmount: 4_500_000),
             deductions: [.init(incomeId: 0, name: "Salud", kind: .percent, value: 400), .init(incomeId: 0, name: "Pensión", kind: .percent, value: 400)],
             bonuses: [.init(incomeId: 0, name: "Auxilio transporte", amount: 232_489)]
         )
@@ -84,14 +84,14 @@ struct Fixture {
     @Test func monthSummaryAndRemaining() throws {
         let f = try Fixture()
         try f.db.startMonth(f.nov, fromTemplates: true)
-        let income0 = Income(sourceId: f.linktic.id!, month: f.nov, date: f.nov.firstDay, netAmount: 4_497_000)
+        let income0 = Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 4_497_000)
         try f.db.write { db in
             try Income.filter(Column("month") == f.nov).deleteAll(db)
             var income = income0
             try income.insert(db)
             let p = try Projection.filter(Column("month") == f.nov).fetchOne(db)!
-            var madre = Commitment(projectionId: p.id!, kind: .necessary, name: "Family", amount: 300_000, date: f.nov.firstDay)
-            try madre.insert(db)
+            var help = Commitment(projectionId: p.id!, kind: .necessary, name: "Family help", amount: 300_000, date: f.nov.firstDay)
+            try help.insert(db)
             var cuota = Commitment(projectionId: p.id!, kind: .debt, name: "Caminadora", amount: 89_000, date: f.nov.firstDay)
             try cuota.insert(db)
             // Gasto del saldo extra y gasto de un fondo

@@ -27,7 +27,7 @@ import GRDB
         let f = try Fixture()
         let oct = YearMonth(year: 2026, month: 10)
         let base = IncomeDetail(
-            income: Income(sourceId: f.linktic.id!, month: oct, date: oct.firstDay, grossAmount: 4_500_000),
+            income: Income(sourceId: f.employer.id!, month: oct, date: oct.firstDay, grossAmount: 4_500_000),
             deductions: [.init(incomeId: 0, name: "Salud", kind: .percent, value: 400)],
             bonuses: [.init(incomeId: 0, name: "Auxilio", amount: 232_489)]
         )
@@ -370,7 +370,7 @@ import GRDB
         let f = try Fixture()
         let oct = YearMonth(year: 2026, month: 10)
         let p = try f.db.startMonth(oct, fromTemplates: true)
-        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.linktic.id!, month: oct, date: oct.firstDay, netAmount: 4_000_000)))
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: oct, date: oct.firstDay, netAmount: 4_000_000)))
         try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Music", amount: 31_000), asTemplate: false)
         try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Phone", amount: 50_000), asTemplate: false)
         try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 10, day: 5), amount: 3_500_000, currency: .cop, reason: "Big", fundId: nil))
@@ -409,7 +409,7 @@ import GRDB
     }
 
     @Test func deepLinkParsing() {
-        let l = DeepLink.parse(URL(string: "cashflow://add?amount=45.000&reason=D1&card=%C3%9Anica&x-success=shortcuts://")!)!
+        let l = DeepLink.parse(URL(string: "cashflow://add?amount=45.000&reason=D1&card=Cr%C3%A9dito&x-success=shortcuts://")!)!
         #expect(l.amount == 45_000 && l.currency == .cop && l.reason == "D1" && l.card == "Crédito" && l.fund == nil)
         #expect(l.callback?.absoluteString == "shortcuts://")
         let u = DeepLink.parse(URL(string: "cashflow://add?amount=12,5&usd=1&reason=App&fund=2&date=2026-11-03")!)!
@@ -418,15 +418,15 @@ import GRDB
         #expect(DeepLink.parse(URL(string: "other://add?amount=1")!) == nil)
         let cards = [Card(id: 1, name: "Crédito Único", creditLimit: 0, cutDay: 1, payDay: 2), Card(id: 2, name: "StoreCard", creditLimit: 0, cutDay: 1, payDay: 2)]
         #expect(DeepLink.match("2", in: cards, id: \.id, name: \.name)?.name == "StoreCard")
-        #expect(DeepLink.match("unica", in: cards, id: \.id, name: \.name) == nil)
-        #expect(DeepLink.match("única", in: cards, id: \.id, name: \.name)?.id == 1)
-        #expect(DeepLink.match("rappi", in: cards, id: \.id, name: \.name)?.id == 2)
+        #expect(DeepLink.match("credito unico", in: cards, id: \.id, name: \.name) == nil)
+        #expect(DeepLink.match("crédito único", in: cards, id: \.id, name: \.name)?.id == 1)
+        #expect(DeepLink.match("store", in: cards, id: \.id, name: \.name)?.id == 2)
     }
 
     @Test func expensesPaidFromCommitmentsDoNotDoubleCount() throws {
         let f = try Fixture()
         let p = try f.db.startMonth(f.nov, fromTemplates: true)
-        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.linktic.id!, month: f.nov, date: f.nov.firstDay, netAmount: 4_000_000)))
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 4_000_000)))
         try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Family help", amount: 300_000, date: f.nov.firstDay), asTemplate: false)
         try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .debt, name: "Treadmill", amount: 90_000, date: f.nov.firstDay), asTemplate: false)
         let cms = try f.db.snapshot().commitments.filter { $0.projectionId == p.id }

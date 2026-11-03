@@ -15,7 +15,7 @@ struct WidgetData: Codable {
     var cards: [CardLine]
     var updatedAt: Date
 
-    static let groups = ["group.com.diegorincon.cashflow", "group.TEAMID.com.diegorincon.cashflow"]
+    static let groups = ["group.com.diegorincon.cashflow"]
 
     static func load() -> WidgetData? {
         for id in groups {

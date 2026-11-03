@@ -24,7 +24,7 @@ public struct WidgetSnapshot: Codable, Sendable, Equatable {
     public var updatedAt: Date
 
     public static let fileName = "widget.json"
-    public static let groupCandidates = ["group.com.diegorincon.cashflow", "group.TEAMID.com.diegorincon.cashflow"]
+    public static let groupCandidates = ["group.com.diegorincon.cashflow"]
 
     public init(month: String, remaining: String, remainingIsNegative: Bool, income: String, spent: String, saved: String,
                 consumablesLeft: String, cards: [CardLine], updatedAt: Date = Date()) {

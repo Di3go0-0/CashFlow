@@ -404,7 +404,7 @@ public struct Contribution: Codable, Identifiable, Hashable, Sendable, Fetchable
 public enum CommitmentKind: String, Codable, Sendable, DatabaseValueConvertible {
     /// Cuota de crédito o deuda.
     case debt
-    /// Gasto necesario puntual (ayuda madre, gafas, una salida grande).
+    /// Gasto necesario puntual (ayuda familiar, unas gafas, una salida grande).
     case necessary
     /// Ajuste de cierre de mes: absorbe la diferencia para que el restante quede en cero. Puede ser negativo.
     case adjustment
