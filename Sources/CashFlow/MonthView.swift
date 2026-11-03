@@ -20,6 +20,11 @@ struct MonthView: View {
         List {
             Section {
                 MonthSwitcher(month: $model.month)
+                NavigationLink {
+                    ProjectionView()
+                } label: {
+                    Label(T("Projection"), systemImage: "chart.bar.doc.horizontal")
+                }
             } footer: {
                 if model.isFutureMonth {
                     Text(T("Future month: changes only apply to this month."))

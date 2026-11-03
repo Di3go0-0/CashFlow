@@ -22,6 +22,8 @@ public struct Snapshot: Sendable {
     public var cardExpenses: [CardExpense] = []
     public var allocations: [CardAllocation] = []
     public var payments: [CardPayment] = []
+    public var scenarios: [Scenario] = []
+    public var scenarioLines: [ScenarioLine] = []
 
     public init() {}
 
@@ -48,6 +50,8 @@ public struct Snapshot: Sendable {
         s.cardExpenses = try CardExpense.order(Column("date").desc, Column("id").desc).fetchAll(db)
         s.allocations = try CardAllocation.fetchAll(db)
         s.payments = try CardPayment.fetchAll(db)
+        s.scenarios = try Scenario.order(Column("createdAt").desc, Column("id").desc).fetchAll(db)
+        s.scenarioLines = try ScenarioLine.fetchAll(db)
         return s
     }
 

@@ -15,7 +15,7 @@ xtool dev                  # compila, firma e instala en el iPhone (desbloqueado
 - `sudo` y comandos interactivos (`xtool setup`) no corren desde la sesión de Claude; los ejecuta el usuario en su terminal.
 - Si usbmuxd no ve el iPhone: `sudo systemctl restart usbmuxd`, desbloquear y reconectar.
 - La firma con Apple ID gratuito caduca cada 7 días; reinstalar con `xtool dev` no borra datos.
-- Versión: `CFBundleShortVersionString` en `Info.plist` se queda en **0.0.1** mientras la app esté en beta. `CFBundleVersion` es el número de build y sí puede crecer.
+- Versión: `CFBundleShortVersionString` en `Info.plist`. La `0.0.1` quedó etiquetada como beta oficial; desde el 2 de noviembre de 2026 se construye la **0.0.2** (en curso, sin fecha de cierre) y el número no sube con cada cambio. `CFBundleVersion` es el número de build y sí puede crecer.
 - Ícono: `Icon.svg` → `Icon.png` con `rsvg-convert -w 1024 -h 1024 Icon.svg -o Icon.png`.
 - Commits sin línea de coautor.
 
@@ -51,6 +51,7 @@ xtool dev                  # compila, firma e instala en el iPhone (desbloqueado
 - Selector de mes: tocar el nombre abre `MonthJumpSheet`; mantener pulsado o tocar de nuevo la pestaña activa vuelve al mes en curso.
 - Nada de nombres personales (empleadores, familiares, marcas de tarjetas) en textos de la interfaz, tests ni documentación versionada. Siempre "tarjeta de crédito", no "tarjeta".
 - Acciones rápidas del ícono (`UIApplicationShortcutItems`, `QuickActions.swift`) y enlace `cashflow://add?amount=&reason=&card=|fund=&usd=1&date=&x-success=` (`DeepLink`) para registrar gastos desde Atajos. App Intents no es viable con xtool.
+- **Proyección** (0.0.2, `Logic/Scenarios.swift`, `ProjectionView.swift`, migración v12): escenarios (`Scenario` con ingreso + `ScenarioLine` por aporte/consumible/deuda/necesario) que se crean desde lo habitual del mes elegido (`createScenario(basedOn:)`: fuentes recurrentes o último ingreso, aporte sugerido o del mes base, consumibles y compromisos del mes base) y se editan sin tocar meses reales. `ScenarioSummary` da comprometido y libre; `applyScenario(to:)` reemplaza aportes, consumibles y compromisos sin plan de un mes (en curso o futuro). Entrada: pestaña Mes → "Projection".
 - **Bloqueo opcional** (`AppLock.swift`, LocalAuthentication, ajuste `ui.lock`): Face ID o código al abrir y al volver del fondo.
 - Recordatorios locales (`Reminders.swift`) dos días antes de corte y pago. Widget en `Attic/`: no viable con xtool en cuenta gratuita (sin App Groups).
 - Nunca borrar filas con `sqlite3` directo sin limpiar hijos: la CLI no aplica claves foráneas. Nunca perder datos del teléfono: migraciones solo agregan; hay test de migración desde v1.

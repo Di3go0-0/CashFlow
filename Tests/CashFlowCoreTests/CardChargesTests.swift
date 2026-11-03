@@ -208,4 +208,33 @@ import GRDB
         #expect(snap.adjustments.filter { $0.reason == "Month-end" }.count == 1)
         #expect(snap.projection(for: f.nov)?.isClosed == true)
     }
+
+    @Test func scenarioStartsFromUsualAmountsAndAppliesToAMonth() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov, fromTemplates: true)
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 4_000_000)))
+        try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Family help", amount: 300_000, date: f.nov.firstDay), asTemplate: false)
+        let s = try f.db.createScenario(name: "Plan A", basedOn: f.nov, today: DayDate(year: 2026, month: 11, day: 5))
+        var snap = try f.db.snapshot()
+        var sum = snap.scenarioSummary(s)
+        #expect(sum.income == 4_000_000)
+        #expect(sum.contributions == 250_000 + 300_000 + 680_000)
+        #expect(sum.necessary == 300_000 && sum.free == 4_000_000 - 1_530_000)
+
+        // Mover plata: apagar un aporte y subir el ingreso.
+        var motoLine = snap.lines(of: s.id!).first { $0.fundId == f.moto.id }!
+        motoLine.enabled = false
+        try f.db.saveScenarioLine(motoLine)
+        var edited = s; edited.income = 4_500_000
+        try f.db.saveScenario(edited)
+        snap = try f.db.snapshot()
+        sum = snap.scenarioSummary(edited)
+        #expect(sum.contributions == 980_000 && sum.free == 4_500_000 - 1_280_000)
+
+        try f.db.applyScenario(id: s.id!, to: f.dec)
+        snap = try f.db.snapshot()
+        let dec = snap.monthSummary(f.dec)
+        #expect(dec.contributions == 980_000 && dec.necessary == 300_000)
+        #expect(snap.contributions.filter { f.dec.contains($0.date) }.count == 2)
+    }
 }

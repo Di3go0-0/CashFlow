@@ -312,6 +312,25 @@ public final class AppDatabase: Sendable {
                 t.add(column: "cycleEnd", .text)
             }
         }
+        m.registerMigration("v12") { db in
+            try db.create(table: "scenario") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("income", .integer).notNull().defaults(to: 0)
+                t.column("createdAt", .text).notNull()
+                t.column("note", .text).notNull().defaults(to: "")
+            }
+            try db.create(table: "scenarioLine") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("scenarioId", .integer).notNull().indexed().references("scenario", onDelete: .cascade)
+                t.column("kind", .text).notNull()
+                t.column("name", .text).notNull()
+                t.column("fundId", .integer).references("fund", onDelete: .setNull)
+                t.column("amount", .integer).notNull().defaults(to: 0)
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+                t.column("enabled", .boolean).notNull().defaults(to: true)
+            }
+        }
         return m
     }
 }
