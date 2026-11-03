@@ -466,7 +466,9 @@ struct IncomeEditView: View {
                             Text(s.name).tag(s.id!)
                         }
                     }
-                    DayDatePicker(title: T("Date"), day: $detail.income.date)
+                    if detail.income.scenarioId == nil {
+                        DayDatePicker(title: T("Date"), day: $detail.income.date)
+                    }
                     Picker(T("Status"), selection: $detail.income.status) {
                         Text(T("Received")).tag(IncomeStatus.confirmed)
                         Text(T("Pending")).tag(IncomeStatus.pending)
@@ -537,7 +539,7 @@ struct IncomeEditView: View {
                 Section {
                     MoneyRow(title: T("Net"), amount: preview.net, emphasis: true)
                 } footer: {
-                    if model.editsTemplate, model.snapshot.source(detail.income.sourceId)?.isRecurring == true {
+                    if model.editsTemplate, detail.income.scenarioId == nil, model.snapshot.source(detail.income.sourceId)?.isRecurring == true {
                         Text(T("Recurring source: this breakdown is preloaded in the next months."))
                     }
                 }
@@ -554,7 +556,7 @@ struct IncomeEditView: View {
                         d.income.month = model.month
                         d.deductions.removeAll { $0.name.trimmingCharacters(in: .whitespaces).isEmpty && $0.value == 0 }
                         d.bonuses.removeAll { $0.name.trimmingCharacters(in: .whitespaces).isEmpty && $0.amount == 0 }
-                        let asTemplate = model.editsTemplate
+                        let asTemplate = model.editsTemplate && d.income.scenarioId == nil
                         if model.perform({ try model.db.saveIncome(d, asTemplate: asTemplate) }) { dismiss() }
                     }
                 }

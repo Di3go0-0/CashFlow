@@ -49,6 +49,8 @@ public struct Income: Codable, Identifiable, Hashable, Sendable, FetchableRecord
     public var netAmount: Int64?
     public var status: IncomeStatus
     public var note: String
+    /// Ingreso de un escenario de proyección, no de un mes real.
+    public var scenarioId: Int64? = nil
 
     public init(id: Int64? = nil, sourceId: Int64, month: YearMonth, date: DayDate, grossAmount: Int64? = nil,
                 netAmount: Int64? = nil, status: IncomeStatus = .confirmed, note: String = "") {

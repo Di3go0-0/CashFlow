@@ -94,11 +94,17 @@ public extension Snapshot {
         scenarioLines.filter { $0.scenarioId == scenarioId }.sorted { ($0.kind.rawValue, $0.sortOrder, $0.id ?? 0) < ($1.kind.rawValue, $1.sortOrder, $1.id ?? 0) }
     }
 
+    /// Ingresos de un escenario, con el mismo detalle (bruto, descuentos, bonos) que los de un mes.
+    func scenarioIncomes(of scenarioId: Int64) -> [IncomeDetail] {
+        scenarioIncomes.filter { $0.income.scenarioId == scenarioId }
+    }
+
     func scenarioSummary(_ s: Scenario) -> ScenarioSummary {
         let ls = lines(of: s.id!).filter(\.enabled)
         func sum(_ k: ScenarioLineKind) -> Int64 { ls.filter { $0.kind == k }.reduce(0) { $0 + $1.amount } }
-        // El ingreso son sus fuentes; si el escenario no tiene líneas de ingreso, vale el monto directo.
-        let income = ls.contains { $0.kind == .income } ? sum(.income) : s.income
+        let incomes = scenarioIncomes(of: s.id!)
+        let income: Int64 = !incomes.isEmpty ? incomes.reduce(0) { $0 + $1.net }
+            : (ls.contains { $0.kind == .income } ? sum(.income) : s.income)
         return ScenarioSummary(income: income, contributions: sum(.contribution), consumables: sum(.consumable),
                                debts: sum(.debt), necessary: sum(.necessary))
     }
@@ -117,22 +123,33 @@ public extension AppDatabase {
             if let last = byMonth.keys.max() { income = byMonth[last]!.reduce(0) { $0 + $1.net } }
         }
         let base = snap.projection(for: month) ?? snap.projections.filter { $0.month <= month }.max { $0.month < $1.month }
-        // Fuentes de ingreso como líneas: las recurrentes con su plantilla, o los ingresos del último mes con datos.
-        var incomeLines: [(String, Int64)] = snap.sources.filter { $0.isRecurring && !$0.isArchived }
-            .map { ($0.name, snap.templateNet(of: $0, month: month)) }.filter { $0.1 > 0 }
-        if incomeLines.isEmpty {
+        // Ingresos del escenario: copia de las fuentes recurrentes con su desglose, o de los ingresos del último mes con datos.
+        var seeds: [IncomeDetail] = snap.sources.filter { $0.isRecurring && !$0.isArchived }.map { src in
+            IncomeDetail(
+                income: Income(sourceId: src.id!, month: month, date: month.firstDay, grossAmount: src.templateGross, netAmount: src.templateNet, status: .confirmed),
+                deductions: snap.sourceDeductions.filter { $0.sourceId == src.id }.map { IncomeDeduction(incomeId: 0, name: $0.name, kind: $0.kind, value: $0.value) },
+                bonuses: snap.sourceBonuses.filter { $0.sourceId == src.id }.map { IncomeBonus(incomeId: 0, name: $0.name, amount: $0.amount) })
+        }.filter { $0.net > 0 }
+        if seeds.isEmpty {
             let byMonth = Dictionary(grouping: snap.incomes.filter { $0.income.status == .confirmed }, by: \.income.month)
             if let last = byMonth.keys.max() {
-                incomeLines = byMonth[last]!.map { (snap.source($0.income.sourceId)?.name ?? "Income", $0.net) }
+                seeds = byMonth[last]!.map { d in
+                    IncomeDetail(income: Income(sourceId: d.income.sourceId, month: month, date: month.firstDay, grossAmount: d.income.grossAmount, netAmount: d.income.netAmount, status: .confirmed),
+                                 deductions: d.deductions.map { IncomeDeduction(incomeId: 0, name: $0.name, kind: $0.kind, value: $0.value) },
+                                 bonuses: d.bonuses.map { IncomeBonus(incomeId: 0, name: $0.name, amount: $0.amount) })
+                }
             }
         }
         return try write { db in
             var s = Scenario(name: name, income: income, createdAt: today)
             try s.insert(db)
             var order = 0
-            for (n, a) in incomeLines {
-                var l = ScenarioLine(scenarioId: s.id!, kind: .income, name: n, amount: a, sortOrder: order)
-                try l.insert(db); order += 1
+            for seed in seeds {
+                var inc = seed.income
+                inc.scenarioId = s.id
+                try inc.insert(db)
+                for d in seed.deductions { var c = IncomeDeduction(incomeId: inc.id!, name: d.name, kind: d.kind, value: d.value); try c.insert(db) }
+                for b in seed.bonuses { var c = IncomeBonus(incomeId: inc.id!, name: b.name, amount: b.amount); try c.insert(db) }
             }
             for f in snap.funds where !f.isArchived && !f.isCardPocket {
                 let amount = base.flatMap { p in snap.contributions.first { $0.projectionId == p.id && $0.fundId == f.id }?.amount } ?? f.defaultContribution

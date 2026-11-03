@@ -331,6 +331,11 @@ public final class AppDatabase: Sendable {
                 t.column("enabled", .boolean).notNull().defaults(to: true)
             }
         }
+        m.registerMigration("v13") { db in
+            try db.alter(table: "income") { t in
+                t.add(column: "scenarioId", .integer).indexed().references("scenario", onDelete: .cascade)
+            }
+        }
         return m
     }
 }

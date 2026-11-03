@@ -24,6 +24,7 @@ public struct Snapshot: Sendable {
     public var payments: [CardPayment] = []
     public var scenarios: [Scenario] = []
     public var scenarioLines: [ScenarioLine] = []
+    public var scenarioIncomes: [IncomeDetail] = []
 
     public init() {}
 
@@ -37,7 +38,9 @@ public struct Snapshot: Sendable {
         let incomes = try Income.order(Column("date")).fetchAll(db)
         let deductions = Dictionary(grouping: try IncomeDeduction.fetchAll(db), by: \.incomeId)
         let bonuses = Dictionary(grouping: try IncomeBonus.fetchAll(db), by: \.incomeId)
-        s.incomes = incomes.map { IncomeDetail(income: $0, deductions: deductions[$0.id!] ?? [], bonuses: bonuses[$0.id!] ?? []) }
+        let details = incomes.map { IncomeDetail(income: $0, deductions: deductions[$0.id!] ?? [], bonuses: bonuses[$0.id!] ?? []) }
+        s.incomes = details.filter { $0.income.scenarioId == nil }
+        s.scenarioIncomes = details.filter { $0.income.scenarioId != nil }
         s.funds = try Fund.order(Column("sortOrder"), Column("name")).fetchAll(db)
         s.adjustments = try FundAdjustment.fetchAll(db)
         s.cards = try Card.order(Column("name")).fetchAll(db)

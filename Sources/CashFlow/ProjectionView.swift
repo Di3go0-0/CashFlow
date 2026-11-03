@@ -65,6 +65,8 @@ struct ScenarioEditView: View {
     @State private var editingName = false
     @State private var nameDraft = ""
     @State private var editingLine: ScenarioLine?
+    @State private var editingIncome: IncomeDetail?
+    @State private var showSources = false
     @AppStorage("scenario.collapsed") private var collapsedRaw = ""
 
     private var scenario: Scenario? { model.snapshot.scenarios.first { $0.id == scenarioId } }
@@ -101,7 +103,7 @@ struct ScenarioEditView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 }
-                kindSection(.income, title: T("Income"), key: "income", addLabel: T("Add income"), lines: lines, income: sum.income, total: sum.income)
+                incomesSection(s, total: sum.income)
                 Section {
                     if !isCollapsed("distribution") {
                         ShareBars(summary: sum, colors: Palette.series(scheme))
@@ -148,6 +150,8 @@ struct ScenarioEditView: View {
                 }
             }
             .sheet(item: $editingLine) { ScenarioLineEditView(line: $0) }
+            .sheet(item: $editingIncome) { IncomeEditView(detail: $0) }
+            .sheet(isPresented: $showSources) { NavigationStack { IncomeSourcesView() } }
             .sheet(isPresented: $editingName) {
                 NameSheet(title: T("Rename"), name: s.name, action: T("Save"), footer: nil) { name in
                     var c = s; c.name = name
@@ -163,6 +167,56 @@ struct ScenarioEditView: View {
             .onAppear { applyMonth = max(model.activeMonth, model.month) }
         } else {
             ContentUnavailableView(T("Scenario not found"), systemImage: "chart.bar.doc.horizontal")
+        }
+    }
+
+    /// Ingresos del escenario: mismos registros, filas y editor que la pestaña Mes.
+    private func incomesSection(_ s: Scenario, total: Int64) -> some View {
+        let incomes = model.snapshot.scenarioIncomes(of: scenarioId)
+        return Section {
+            if !isCollapsed("income") {
+                if incomes.isEmpty {
+                    EmptyHint(text: T("No income in this scenario."))
+                }
+                ForEach(incomes) { d in
+                    Button { editingIncome = d } label: {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(model.sourceName(d.income.sourceId))
+                                if d.income.grossAmount != nil {
+                                    Text(T("Gross %@ · deductions %@ · bonuses %@", MoneyFormat.cop(d.income.grossAmount ?? 0), MoneyFormat.cop(d.deductionsTotal), MoneyFormat.cop(d.bonusesTotal)))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            MoneyText(amount: d.net, percentOf: total)
+                        }
+                    }
+                    .tint(.primary)
+                }
+                .onDelete { idx in
+                    let ids = idx.map { incomes[$0].income.id! }
+                    model.write { db in try Income.deleteAll(db, ids: ids) }
+                }
+                Button {
+                    if model.activeSources.isEmpty {
+                        showSources = true
+                    } else {
+                        var inc = Income(sourceId: model.activeSources[0].id!, month: model.month, date: model.month.firstDay, netAmount: 0, status: .confirmed)
+                        inc.scenarioId = scenarioId
+                        editingIncome = IncomeDetail(income: inc)
+                    }
+                } label: {
+                    Label(T("Add income"), systemImage: "plus")
+                }
+            }
+        } header: {
+            HStack {
+                collapsible(T("Income"), key: "income")
+                Spacer()
+                Button(T("Sources")) { showSources = true }.font(.caption)
+                MoneyText(amount: total)
+            }
         }
     }
 

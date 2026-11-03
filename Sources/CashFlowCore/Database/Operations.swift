@@ -73,7 +73,7 @@ public extension AppDatabase {
 
             let sources = try IncomeSource.filter(Column("isRecurring") == true && Column("isArchived") == false).fetchAll(db)
             for s in sources {
-                let exists = try Income.filter(Column("sourceId") == s.id! && Column("month") == month).fetchCount(db) > 0
+                let exists = try Income.filter(Column("sourceId") == s.id! && Column("month") == month && Column("scenarioId") == nil).fetchCount(db) > 0
                 if exists { continue }
                 var income = Income(sourceId: s.id!, month: month, date: month.firstDay,
                                     grossAmount: s.templateGross, netAmount: s.templateNet, status: .pending)
@@ -101,7 +101,7 @@ public extension AppDatabase {
                 try Commitment.filter(Column("projectionId") == p.id!).deleteAll(db)
                 try p.delete(db)
             }
-            try Income.filter(Column("month") == month).deleteAll(db)
+            try Income.filter(Column("month") == month && Column("scenarioId") == nil).deleteAll(db)
         }
     }
 
