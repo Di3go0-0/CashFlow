@@ -79,6 +79,17 @@ public struct ScenarioSummary: Hashable, Sendable {
 }
 
 public extension Snapshot {
+    /// Neto que dejaría una fuente recurrente según su plantilla: bruto menos descuentos más bonos.
+    func templateNet(of source: IncomeSource, month: YearMonth) -> Int64 {
+        let income = Income(sourceId: source.id!, month: month, date: month.firstDay,
+                            grossAmount: source.templateGross, netAmount: source.templateNet, status: .pending)
+        let detail = IncomeDetail(
+            income: income,
+            deductions: sourceDeductions.filter { $0.sourceId == source.id }.map { IncomeDeduction(incomeId: 0, name: $0.name, kind: $0.kind, value: $0.value) },
+            bonuses: sourceBonuses.filter { $0.sourceId == source.id }.map { IncomeBonus(incomeId: 0, name: $0.name, amount: $0.amount) })
+        return detail.net
+    }
+
     func lines(of scenarioId: Int64) -> [ScenarioLine] {
         scenarioLines.filter { $0.scenarioId == scenarioId }.sorted { ($0.kind.rawValue, $0.sortOrder, $0.id ?? 0) < ($1.kind.rawValue, $1.sortOrder, $1.id ?? 0) }
     }
@@ -99,7 +110,7 @@ public extension AppDatabase {
     @discardableResult
     func createScenario(name: String, basedOn month: YearMonth, today: DayDate) throws -> Scenario {
         let snap = try snapshot()
-        var income = snap.sources.filter { $0.isRecurring && !$0.isArchived }.reduce(Int64(0)) { $0 + ($1.templateNet ?? $1.templateGross ?? 0) }
+        var income = snap.sources.filter { $0.isRecurring && !$0.isArchived }.reduce(Int64(0)) { $0 + snap.templateNet(of: $1, month: month) }
         if income == 0 {
             // Último mes con ingreso confirmado.
             let byMonth = Dictionary(grouping: snap.incomes.filter { $0.income.status == .confirmed }, by: \.income.month)
@@ -108,7 +119,7 @@ public extension AppDatabase {
         let base = snap.projection(for: month) ?? snap.projections.filter { $0.month <= month }.max { $0.month < $1.month }
         // Fuentes de ingreso como líneas: las recurrentes con su plantilla, o los ingresos del último mes con datos.
         var incomeLines: [(String, Int64)] = snap.sources.filter { $0.isRecurring && !$0.isArchived }
-            .map { ($0.name, $0.templateNet ?? $0.templateGross ?? 0) }.filter { $0.1 > 0 }
+            .map { ($0.name, snap.templateNet(of: $0, month: month)) }.filter { $0.1 > 0 }
         if incomeLines.isEmpty {
             let byMonth = Dictionary(grouping: snap.incomes.filter { $0.income.status == .confirmed }, by: \.income.month)
             if let last = byMonth.keys.max() {

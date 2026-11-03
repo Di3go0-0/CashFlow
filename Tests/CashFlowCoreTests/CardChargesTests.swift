@@ -258,4 +258,20 @@ import GRDB
         #expect(snap.lines(of: s.id!).contains { $0.name == "Custom" && $0.amount == 123_000 })
         #expect(snap.scenarioSummary(renamed).income == 500_000)
     }
+
+    @Test func scenarioIncomeUsesTheNetOfTheRecurringSource() throws {
+        let f = try Fixture()
+        let oct = YearMonth(year: 2026, month: 10)
+        // Plantilla de la fuente: bruto con 8 % de descuentos y un bono.
+        try f.db.saveIncome(IncomeDetail(
+            income: Income(sourceId: f.employer.id!, month: oct, date: oct.firstDay, grossAmount: 4_500_000),
+            deductions: [.init(incomeId: 0, name: "Health", kind: .percent, value: 400), .init(incomeId: 0, name: "Pension", kind: .percent, value: 400)],
+            bonuses: [.init(incomeId: 0, name: "Transport", amount: 232_489)]), asTemplate: true)
+        try f.db.startMonth(f.nov)
+        let s = try f.db.createScenario(name: "Net", basedOn: f.nov, today: DayDate(year: 2026, month: 11, day: 5))
+        let snap = try f.db.snapshot()
+        let line = snap.lines(of: s.id!).first { $0.kind == .income }!
+        #expect(line.amount == 4_500_000 - 360_000 + 232_489)
+        #expect(snap.scenarioSummary(s).income == 4_372_489)
+    }
 }
