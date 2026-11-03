@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  App personal de finanzas para iPhone. Reemplaza mi sistema anterior de cuentas por bolsillos.<br>
+  Finanzas personales por bolsillos, para iPhone: cada peso del mes tiene un destino antes de gastarse.<br>
   Swift 6 · SwiftUI · GRDB · compilada e instalada desde Arch Linux con <a href="https://xtool.sh">xtool</a>, sin Mac.
 </p>
 
@@ -20,7 +20,7 @@
 
 ## Qué hace
 
-La app sigue el mismo sistema que usaba en la sistema anterior: el ingreso del mes se reparte en **fondos** (bolsillos con propósito), **consumibles** (gastos fijos que se pagan poco a poco), **deudas** y **gastos necesarios**; lo que sobra es el saldo **libre para gastar**. Cada gasto sale de alguno de esos sitios o de una tarjeta de crédito.
+La idea es simple: el ingreso del mes se reparte en **fondos** (bolsillos con propósito), **consumibles** (gastos fijos que se pagan poco a poco), **deudas** y **gastos necesarios**; lo que sobra es el saldo **libre para gastar**. Cada gasto sale de alguno de esos sitios o de una tarjeta de crédito.
 
 - **Resumen** del mes: libre para gastar, cuánto por día, a dónde va el ingreso, últimos seis meses, fondos y tarjetas. Botón del ojo para ocultar montos y ver solo porcentajes.
 - **Mes**: ingresos (con descuentos y bonos), aportes a fondos, consumibles, deudas y gastos necesarios. Cada categoría se trae del mes anterior con un botón. Un mes se puede **terminar** desde dos días antes de que acabe; la app pasa al siguiente como mes en curso.
@@ -60,7 +60,7 @@ Con Apple ID gratuito la firma caduca cada siete días; reinstalar no borra dato
 
 - **Sin Mac**: todo el ciclo (compilar, firmar, instalar, leer la base del teléfono) corre en Linux con xtool y libimobiledevice. Eso descartó SwiftData, App Intents y widgets, y llevó a GRDB, un URL scheme para Atajos y una herramienta propia para tocar la base.
 - **Núcleo probado sin interfaz**: `CashFlowCore` no importa SwiftUI, así que `swift test` corre en Linux y en CI. Las reglas de negocio (doble conteo, ciclos, cierre de mes, migraciones) tienen pruebas.
-- **Datos reales desde el día uno**: la app se construyó encima de meses históricos cargados desde la sistema anterior y cuadrados contra los extractos del banco.
+- **Datos reales desde el día uno**: la app se construyó con varios meses de movimientos reales cargados y cuadrados contra los extractos del banco, y se usa a diario.
 
 ## Estado
 

@@ -213,7 +213,7 @@ public extension AppDatabase {
 
     /// Liga a compromisos los gastos y abonos que salieron del saldo extra y coinciden con un compromiso del mismo mes
     /// o del siguiente (compra hecha antes del mes en que se planeó), por nombre o por monto (±3 %).
-    /// Devuelve las parejas que ligó. Pensado para datos cargados en bloque.
+    /// Devuelve las parejas que ligó. Pensado para datos históricos cargados en bloque.
     @discardableResult
     func relinkCommitments(months: [YearMonth]) throws -> [(String, String, Int64)] {
         var linked: [(String, String, Int64)] = []

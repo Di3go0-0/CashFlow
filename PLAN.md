@@ -1,6 +1,6 @@
 # CashFlow — Diseño
 
-App iOS personal para reemplazar una sistema anterior de finanzas por bolsillos. Se instala en el iPhone desde Linux con xtool.
+App iOS personal de finanzas por bolsillos. Se instala en el iPhone desde Linux con xtool.
 
 ## Stack
 
@@ -38,6 +38,6 @@ Todo saldo se calcula desde movimientos. Nada de saldos guardados a mano salvo e
 
 ## Historial
 
-- Octubre de 2026: primera versión funcional, reglas de dominio decididas sobre la marcha, datos históricos cargados desde la sistema anterior.
+- Octubre de 2026: primera versión funcional, reglas de dominio decididas sobre la marcha, meses históricos cargados y cuadrados contra el banco.
 - 31 de octubre de 2026: cuotas y cuota de manejo automáticas, balance por ciclo, mes compartido entre pestañas, modo discreto, piel iOS 26.
 - 1 de noviembre de 2026: beta oficial 0.0.1 (`v0.0.1`).
