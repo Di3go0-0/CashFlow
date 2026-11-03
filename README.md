@@ -18,10 +18,6 @@
 
 ---
 
-## Capturas
-
-<!-- Pendientes: Resumen, Mes, Tarjeta de crédito, Modo discreto -->
-
 ## Qué hace
 
 La app sigue el mismo sistema que usaba en la sistema anterior: el ingreso del mes se reparte en **fondos** (bolsillos con propósito), **consumibles** (gastos fijos que se pagan poco a poco), **deudas** y **gastos necesarios**; lo que sobra es el saldo **libre para gastar**. Cada gasto sale de alguno de esos sitios o de una tarjeta de crédito.
