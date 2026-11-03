@@ -435,7 +435,7 @@ struct CardExpenseEditView: View {
                             }
                         }
                     } footer: {
-                        Text(T("Each top-up moves money into the card's payment pocket from a fund, the extra balance or the consumables pool (whose item gets marked as paid)."))
+                        Text(T("Each top-up moves money into the card's payment pocket from a fund, the extra balance or the bills pool (whose item gets marked as paid)."))
                     }
                 } else {
                     Section {

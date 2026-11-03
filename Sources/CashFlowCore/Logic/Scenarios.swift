@@ -64,6 +64,15 @@ public struct ScenarioSummary: Hashable, Sendable {
     public var consumables: Int64
     public var debts: Int64
     public var necessary: Int64
+
+    public init(income: Int64, contributions: Int64, consumables: Int64, debts: Int64, necessary: Int64) {
+        self.income = income
+        self.contributions = contributions
+        self.consumables = consumables
+        self.debts = debts
+        self.necessary = necessary
+    }
+
     public var committed: Int64 { contributions + consumables + debts + necessary }
     public var free: Int64 { income - committed }
     public func share(_ amount: Int64) -> Double { income > 0 ? Double(amount) / Double(income) : 0 }

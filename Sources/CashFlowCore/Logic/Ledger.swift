@@ -78,8 +78,8 @@ public struct Snapshot: Sendable {
 
     public func sourceName(fundId: Int64?, fromConsumables: Bool, consumableId: Int64?, commitmentId: Int64? = nil) -> String {
         if let cm = commitment(commitmentId) { return L10n.tr("Commitment: %@", cm.name) }
-        if let c = consumable(consumableId) { return L10n.tr("Consumable: %@", c.name) }
-        if fromConsumables { return L10n.tr("Consumables") }
+        if let c = consumable(consumableId) { return L10n.tr("Bill: %@", c.name) }
+        if fromConsumables { return L10n.tr("Bills") }
         if let f = fund(fundId) { return f.name }
         return L10n.tr("Free to spend")
     }

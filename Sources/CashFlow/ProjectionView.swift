@@ -19,7 +19,9 @@ struct ProjectionView: View {
             }
             ForEach(scenarios) { s in
                 let sum = model.snapshot.scenarioSummary(s)
-                NavigationLink(value: s.id!) {
+                NavigationLink {
+                    ScenarioEditView(scenarioId: s.id!)
+                } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text(s.name).font(.headline)
@@ -37,7 +39,6 @@ struct ProjectionView: View {
         }
         .auroraList()
         .navigationTitle(T("Projection"))
-        .navigationDestination(for: Int64.self) { ScenarioEditView(scenarioId: $0) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -54,7 +55,7 @@ struct ProjectionView: View {
             }
             Button(T("Cancel"), role: .cancel) {}
         } message: {
-            Text(T("It starts from %@: funds, consumables, debts, necessary expenses and recurring income.", model.month.displayName))
+            Text(T("It starts from %@: funds, bills, debts, necessary expenses and recurring income.", model.month.displayName))
         }
     }
 }
@@ -67,6 +68,7 @@ struct ScenarioEditView: View {
     @State private var confirmApply = false
     @State private var editingName = false
     @State private var nameDraft = ""
+    @State private var incomeDraft: Int64 = 0
 
     private var scenario: Scenario? { model.snapshot.scenarios.first { $0.id == scenarioId } }
 
@@ -80,7 +82,7 @@ struct ScenarioEditView: View {
                         title: T("Free to spend"),
                         value: sum.free,
                         caption: T("≈ %@ per day over 30 days", MoneyFormat.cop(max(sum.free, 0) / 30)),
-                        stats: [(T("Funds"), sum.contributions), (T("Consumables"), sum.consumables), (T("Debts"), sum.debts), (T("Necessary"), sum.necessary)],
+                        stats: [(T("Funds"), sum.contributions), (T("Bills"), sum.consumables), (T("Debts"), sum.debts), (T("Necessary"), sum.necessary)],
                         percentOf: sum.income, statsPercentOf: sum.income
                     )
                     .listRowInsets(EdgeInsets())
@@ -93,12 +95,15 @@ struct ScenarioEditView: View {
                     Text(T("Where the money goes"))
                 }
                 Section(T("Income")) {
-                    MoneyField(title: T("Monthly income"), amount: Binding(
-                        get: { s.income },
-                        set: { v in var c = s; c.income = v; model.perform { try model.db.saveScenario(c) } }))
+                    MoneyField(title: T("Monthly income"), amount: $incomeDraft)
+                        .onChange(of: incomeDraft) { _, v in
+                            guard v != s.income else { return }
+                            var c = s; c.income = v
+                            model.perform { try model.db.saveScenario(c) }
+                        }
                 }
                 kindSection(.contribution, title: T("Fund contributions"), lines: lines, income: sum.income)
-                kindSection(.consumable, title: T("Consumables"), lines: lines, income: sum.income)
+                kindSection(.consumable, title: T("Bills"), lines: lines, income: sum.income)
                 kindSection(.debt, title: T("Debts"), lines: lines, income: sum.income)
                 kindSection(.necessary, title: T("Necessary expenses"), lines: lines, income: sum.income)
                 Section {
@@ -112,7 +117,7 @@ struct ScenarioEditView: View {
                 } header: {
                     Text(T("Apply"))
                 } footer: {
-                    Text(T("Replaces that month's contributions, consumables, debts and necessary expenses with this scenario. Installments stay. Only the current month or later."))
+                    Text(T("Replaces that month's contributions, bills, debts and necessary expenses with this scenario. Installments stay. Only the current month or later."))
                 }
             }
             .auroraList()
@@ -134,7 +139,10 @@ struct ScenarioEditView: View {
                     model.month = applyMonth
                 }
             }
-            .onAppear { applyMonth = max(model.activeMonth, model.month) }
+            .onAppear {
+                applyMonth = max(model.activeMonth, model.month)
+                incomeDraft = s.income
+            }
         } else {
             ContentUnavailableView(T("Scenario not found"), systemImage: "chart.bar.doc.horizontal")
         }
@@ -145,21 +153,7 @@ struct ScenarioEditView: View {
         let items = lines.filter { $0.kind == kind }
         Section {
             ForEach(items) { l in
-                HStack(spacing: 10) {
-                    Button {
-                        var c = l; c.enabled.toggle(); model.perform { try model.db.saveScenarioLine(c) }
-                    } label: {
-                        Image(systemName: l.enabled ? "checkmark.circle.fill" : "circle").foregroundStyle(l.enabled ? Theme.accent : .secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    MoneyField(title: l.name, amount: Binding(
-                        get: { l.amount },
-                        set: { v in var c = l; c.amount = v; model.perform { try model.db.saveScenarioLine(c) } }))
-                    .opacity(l.enabled ? 1 : 0.45)
-                    if MoneyFormat.hidden == false && income > 0 {
-                        Text(Pct.string(l.amount, of: income)).font(.caption).foregroundStyle(.secondary).monospacedDigit().frame(minWidth: 40, alignment: .trailing)
-                    }
-                }
+                ScenarioLineRow(line: l, income: income)
             }
             .onDelete { idx in
                 model.perform { try model.db.deleteScenarioLines(ids: idx.map { items[$0].id! }) }
@@ -196,6 +190,37 @@ struct ScenarioEditView: View {
     }
 }
 
+/// Fila de un escenario con su propio estado: guarda solo cuando el monto cambia de verdad.
+struct ScenarioLineRow: View {
+    @Environment(AppModel.self) private var model
+    var line: ScenarioLine
+    var income: Int64
+    @State private var amount: Int64 = 0
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                var c = line; c.enabled.toggle()
+                model.perform { try model.db.saveScenarioLine(c) }
+            } label: {
+                Image(systemName: line.enabled ? "checkmark.circle.fill" : "circle").foregroundStyle(line.enabled ? Theme.accent : .secondary)
+            }
+            .buttonStyle(.borderless)
+            MoneyField(title: line.name, amount: $amount)
+                .opacity(line.enabled ? 1 : 0.45)
+            if !MoneyFormat.hidden && income > 0 {
+                Text(Pct.string(amount, of: income)).font(.caption).foregroundStyle(.secondary).monospacedDigit().frame(minWidth: 40, alignment: .trailing)
+            }
+        }
+        .onAppear { amount = line.amount }
+        .onChange(of: amount) { _, v in
+            guard v != line.amount else { return }
+            var c = line; c.amount = v
+            model.perform { try model.db.saveScenarioLine(c) }
+        }
+    }
+}
+
 /// Barra apilada: proporción del ingreso que va a cada categoría y lo que queda libre.
 struct ShareBars: View {
     var summary: ScenarioSummary
@@ -210,7 +235,7 @@ struct ShareBars: View {
     var body: some View {
         let parts = [
             Part(name: T("Funds"), amount: summary.contributions),
-            Part(name: T("Consumables"), amount: summary.consumables),
+            Part(name: T("Bills"), amount: summary.consumables),
             Part(name: T("Debts"), amount: summary.debts),
             Part(name: T("Necessary"), amount: summary.necessary),
             Part(name: T("Free"), amount: max(summary.free, 0)),

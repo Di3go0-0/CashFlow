@@ -302,7 +302,7 @@ struct FinishMonthSheet: View {
                         Label(T("Finish %@", model.month.monthName), systemImage: "lock")
                     }
                 } footer: {
-                    Text(T("Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. If this is the current month, the app moves on to %@.", model.month.next.monthName))
+                    Text(T("Marks pending bills as paid, leaves the bills pool at zero and adds a closing adjustment so the remaining is zero. If this is the current month, the app moves on to %@.", model.month.next.monthName))
                 }
             }
             .auroraList()
@@ -442,8 +442,8 @@ struct SourcePicker: View {
                     }
                 }
             }
-            Section(T("Consumables of %@", model.month.monthName)) {
-                Text(T("Consumables pool")).tag(MoneySource.consumables)
+            Section(T("Bills of %@", model.month.monthName)) {
+                Text(T("Bills pool")).tag(MoneySource.consumables)
                 ForEach(items) { c in
                     Text("\(c.name) · \(MoneyFormat.cop(c.amount))").tag(MoneySource.consumable(c.id!))
                 }
@@ -467,9 +467,9 @@ struct SourceBalanceRow: View {
         case .extra:
             MoneyRow(title: T("Remaining extra balance"), amount: model.summary.remaining)
         case .consumables:
-            MoneyRow(title: T("Left in consumables pool"), amount: model.summary.consumablesPending)
+            MoneyRow(title: T("Left in bills pool"), amount: model.summary.consumablesPending)
         case .consumable:
-            MoneyRow(title: T("Left in consumables pool"), amount: model.summary.consumablesPending,
+            MoneyRow(title: T("Left in bills pool"), amount: model.summary.consumablesPending,
                      subtitle: T("The item will be marked as paid"))
         case .commitment(let id):
             if let c = model.snapshot.commitment(id) {

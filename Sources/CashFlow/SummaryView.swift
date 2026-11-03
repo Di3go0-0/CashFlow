@@ -81,7 +81,7 @@ struct SummaryView: View {
                                  subtitle: T("Debts and necessary expenses without a payment yet"), percentOf: s.income)
                     }
                     if s.consumablesTotal > 0 {
-                        MoneyRow(title: T("Pending consumables"), amount: s.consumablesUnpaid,
+                        MoneyRow(title: T("Pending bills"), amount: s.consumablesUnpaid,
                                  color: s.consumablesPending < 0 ? .red : .primary,
                                  subtitle: T("Pool %@ · left in it %@", MoneyFormat.cop(s.consumablesTotal), MoneyFormat.cop(s.consumablesPending)),
                                  percentOf: s.income)
@@ -90,7 +90,7 @@ struct SummaryView: View {
             }
 
             Section(T("Free to spend")) {
-                MoneyRow(title: T("Free to spend"), amount: s.extraBalance, subtitle: T("Income minus funds, consumables, debts and necessary"), percentOf: s.income)
+                MoneyRow(title: T("Free to spend"), amount: s.extraBalance, subtitle: T("Income minus funds, bills, debts and necessary"), percentOf: s.income)
                 MoneyRow(title: T("Already spent from it"), amount: s.spentFromExtra, percentOf: s.income)
                 MoneyRow(title: T("Remaining"), amount: s.remaining, emphasis: true, color: s.remaining < 0 ? .red : .primary, percentOf: s.income)
                 if let projected = model.projectedRemaining {
@@ -163,7 +163,7 @@ struct PlanDonutChart: View {
     private var slices: [Slice] {
         [
             Slice(name: T("Funds"), amount: summary.contributions),
-            Slice(name: T("Consumables"), amount: summary.consumablesTotal),
+            Slice(name: T("Bills"), amount: summary.consumablesTotal),
             Slice(name: T("Debts"), amount: summary.debts),
             Slice(name: T("Necessary"), amount: summary.necessary),
             Slice(name: T("Extra"), amount: max(summary.extraBalance, 0)),

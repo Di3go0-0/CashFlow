@@ -6,6 +6,7 @@ import CashFlowCore
 /// Ingresos, aportes, consumibles y compromisos del mes elegido.
 struct MonthView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var scheme
     @State private var editingIncome: IncomeDetail?
     @State private var editingContribution: Contribution?
     @State private var editingCommitment: Commitment?
@@ -14,6 +15,28 @@ struct MonthView: View {
     @State private var confirmDelete = false
     @State private var confirmClose = false
     @State private var payingWithCard: Consumable?
+    /// Secciones plegadas, separadas por coma, recordadas entre aperturas.
+    @AppStorage("month.collapsed") private var collapsedRaw = ""
+
+    private func isCollapsed(_ key: String) -> Bool { collapsedRaw.split(separator: ",").contains(Substring(key)) }
+    private func toggle(_ key: String) {
+        var set = Set(collapsedRaw.split(separator: ",").map(String.init))
+        if set.contains(key) { set.remove(key) } else { set.insert(key) }
+        withAnimation(.snappy) { collapsedRaw = set.sorted().joined(separator: ",") }
+    }
+
+    /// Título de sección que se toca para plegar o desplegar, con la misma tipografía de siempre.
+    private func collapsible(_ title: String, key: String) -> some View {
+        Button { toggle(key) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .rotationEffect(.degrees(isCollapsed(key) ? 0 : 90))
+                Text(title)
+            }
+        }
+        .buttonStyle(.plain)
+    }
 
     var body: some View {
         @Bindable var model = model
@@ -32,6 +55,7 @@ struct MonthView: View {
             }
 
             incomesSection
+            if model.projection != nil { distributionSection }
 
             if let p = model.projection {
                 if model.monthIsEmpty(p), model.previousProjection != nil {
@@ -42,7 +66,7 @@ struct MonthView: View {
                             Label(T("Copy everything from %@", model.month.previous.monthName), systemImage: "doc.on.doc")
                         }
                     } footer: {
-                        Text(T("Brings contributions, consumables, debts and necessary expenses at once. You can still bring each category on its own below."))
+                        Text(T("Brings contributions, bills, debts and necessary expenses at once. You can still bring each category on its own below."))
                     }
                 }
                 contributionsSection(p)
@@ -82,7 +106,7 @@ struct MonthView: View {
                             Label(T("Finish %@", model.month.monthName), systemImage: "lock")
                         }
                     } footer: {
-                        Text(T("Marks pending consumables as paid, leaves the consumables pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched. If this is the current month, the app moves on to %@.", model.month.next.monthName))
+                        Text(T("Marks pending bills as paid, leaves the bills pool at zero and adds a closing adjustment so the remaining is zero. Funds are not touched. If this is the current month, the app moves on to %@.", model.month.next.monthName))
                     }
                 } else if model.month == model.today.yearMonth {
                     Section {
@@ -96,7 +120,7 @@ struct MonthView: View {
                             Label(T("Undo starting %@", model.month.monthName), systemImage: "trash")
                         }
                     } footer: {
-                        Text(T("Removes this month's plan, consumables, commitments and preloaded income. Nothing else is touched."))
+                        Text(T("Removes this month's plan, bills, commitments and preloaded income. Nothing else is touched."))
                     }
                 }
             } else {
@@ -142,6 +166,7 @@ struct MonthView: View {
 
     private var incomesSection: some View {
         Section {
+            if !isCollapsed("income") {
             let incomes = model.monthIncomes
             if incomes.isEmpty {
                 EmptyHint(text: T("No income this month."))
@@ -174,9 +199,10 @@ struct MonthView: View {
             } label: {
                 Label(T("Add income"), systemImage: "plus")
             }
+            }
         } header: {
             HStack {
-                Text(T("Income"))
+                collapsible(T("Income"), key: "income")
                 Spacer()
                 Button(T("Sources")) { showSources = true }.font(.caption)
             }
@@ -187,6 +213,7 @@ struct MonthView: View {
 
     private func contributionsSection(_ p: Projection) -> some View {
         Section {
+            if !isCollapsed("funds") {
             let items = model.contributions(of: p)
             ForEach(items) { c in
                 Button { editingContribution = c } label: {
@@ -218,9 +245,10 @@ struct MonthView: View {
             }
             .disabled(model.activeFunds.isEmpty)
             bringButton(.contributions)
+            }
         } header: {
             HStack {
-                Text(T("Fund contributions"))
+                collapsible(T("Fund contributions"), key: "funds")
                 Spacer()
                 Text(MoneyFormat.cop(model.summary.contributions))
             }
@@ -231,6 +259,7 @@ struct MonthView: View {
 
     private func consumablesSection(_ p: Projection) -> some View {
         Section {
+            if !isCollapsed("bills") {
             let items = model.consumables()
             if items.isEmpty {
                 EmptyHint(text: T("Monthly bills you pay bit by bit: subscriptions, services, plans."))
@@ -289,12 +318,13 @@ struct MonthView: View {
             Button {
                 editingConsumable = Consumable(projectionId: p.id!, name: "", amount: 0)
             } label: {
-                Label(T("Add consumable"), systemImage: "plus")
+                Label(T("Add bill"), systemImage: "plus")
             }
             bringButton(.consumables)
+            }
         } header: {
             HStack {
-                Text(T("Consumables"))
+                collapsible(T("Bills"), key: "bills")
                 Spacer()
                 let s = model.summary
                 Text(T("Left %@ · unpaid %@", MoneyFormat.cop(s.consumablesPending), MoneyFormat.cop(s.consumablesUnpaid)))
@@ -306,6 +336,7 @@ struct MonthView: View {
 
     private func commitmentsSection(_ p: Projection, kind: CommitmentKind, category: ProjectionCategory, title: String, addLabel: String) -> some View {
         Section {
+            if !isCollapsed(kind == .debt ? "debts" : "necessary") {
             let items = model.commitments(of: p, kind: kind)
             ForEach(items) { c in
                 let paid = model.snapshot.paid(toward: c.id!)
@@ -335,11 +366,40 @@ struct MonthView: View {
                 Label(addLabel, systemImage: "plus")
             }
             bringButton(category)
+            }
         } header: {
             HStack {
-                Text(title)
+                collapsible(title, key: kind == .debt ? "debts" : "necessary")
                 Spacer()
                 Text(MoneyFormat.cop(kind == .debt ? model.summary.debts : model.summary.necessary))
+            }
+        }
+    }
+
+    /// Cómo se reparte el ingreso del mes: valor y porcentaje por categoría, y lo que queda libre.
+    private var distributionSection: some View {
+        let s = model.summary
+        let sum = ScenarioSummary(income: s.income, contributions: s.contributions, consumables: s.consumablesTotal, debts: s.debts, necessary: s.necessary)
+        return Section {
+            if !isCollapsed("distribution") {
+                ShareBars(summary: sum, colors: Palette.series(scheme))
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+                MoneyRow(title: T("Funds"), amount: sum.contributions, subtitle: Pct.string(sum.contributions, of: sum.income), percentOf: sum.income)
+                MoneyRow(title: T("Bills"), amount: sum.consumables, subtitle: Pct.string(sum.consumables, of: sum.income), percentOf: sum.income)
+                MoneyRow(title: T("Debts"), amount: sum.debts, subtitle: Pct.string(sum.debts, of: sum.income), percentOf: sum.income)
+                MoneyRow(title: T("Necessary"), amount: sum.necessary, subtitle: Pct.string(sum.necessary, of: sum.income), percentOf: sum.income)
+                MoneyRow(title: T("Free to spend"), amount: sum.free, emphasis: true, color: sum.free < 0 ? .red : .primary,
+                         subtitle: Pct.string(sum.free, of: sum.income), percentOf: sum.income)
+            }
+        } header: {
+            HStack {
+                collapsible(T("Distribution"), key: "distribution")
+                Spacer()
+                Text(MoneyFormat.hidden ? Pct.string(sum.committed, of: sum.income) : MoneyFormat.cop(sum.committed))
+            }
+        } footer: {
+            if !isCollapsed("distribution") {
+                Text(T("Committed %@ of the income · %@ free", Pct.string(sum.committed, of: sum.income), Pct.string(sum.free, of: sum.income)))
             }
         }
     }
@@ -348,7 +408,7 @@ struct MonthView: View {
         let s = model.summary
         return Section(T("Result")) {
             MoneyRow(title: T("Income"), amount: s.income, percentOf: s.income)
-            MoneyRow(title: T("Committed"), amount: -s.committed, subtitle: T("Funds, consumables, debts and necessary"), percentOf: s.income)
+            MoneyRow(title: T("Committed"), amount: -s.committed, subtitle: T("Funds, bills, debts and necessary"), percentOf: s.income)
             if s.commitmentsUnpaid > 0 {
                 MoneyRow(title: T("To pay this month"), amount: s.commitmentsUnpaid, color: .secondary,
                          subtitle: T("Record each payment as an expense paid from its commitment"), percentOf: s.income)
@@ -569,7 +629,7 @@ struct PayConsumableSheet: View {
                     }
                     DayDatePicker(title: T("Date"), day: $date)
                 } footer: {
-                    Text(T("Creates the credit card expense and a top-up from the consumables pool. The item is marked as paid."))
+                    Text(T("Creates the credit card expense and a top-up from the bills pool. The item is marked as paid."))
                 }
             }
             .auroraList()
@@ -619,7 +679,7 @@ struct ConsumableEditView: View {
                 }
             }
             .auroraList()
-            .navigationTitle(item.id == nil ? T("New consumable") : T("Consumable"))
+            .navigationTitle(item.id == nil ? T("New bill") : T("Bill"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
