@@ -12,5 +12,7 @@ jobs:
     container: swift:6.2
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve and test
+      - name: SQLite headers for GRDB
+        run: apt-get update && apt-get install -y libsqlite3-dev
+      - name: Test
         run: swift test
