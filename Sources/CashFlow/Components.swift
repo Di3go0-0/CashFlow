@@ -362,6 +362,48 @@ struct LocalizedEditButton: View {
     }
 }
 
+/// Campo de concepto con sugerencias de lo que ya has registrado. Tocar una pone el nombre y, si el monto está en cero, el último monto.
+struct ReasonField: View {
+    @Environment(AppModel.self) private var model
+    @Binding var reason: String
+    @Binding var amount: Int64
+    @FocusState private var focused: Bool
+
+    private var suggestions: [ConceptSuggestion] {
+        let list = model.snapshot.conceptSuggestions(matching: reason)
+        let current = Snapshot.normalizedConcept(reason)
+        return list.filter { $0.name.lowercased() != current }
+    }
+
+    var body: some View {
+        TextField(T("Reason"), text: $reason)
+            .focused($focused)
+            .textInputAutocapitalization(.sentences)
+        if focused, !suggestions.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(suggestions) { s in
+                        Button {
+                            reason = s.name
+                            if amount == 0 { amount = s.lastAmount }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(s.name).font(.subheadline)
+                                Text(MoneyFormat.cop(s.lastAmount)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Theme.accent.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 6, trailing: 0))
+        }
+    }
+}
+
 /// Botón del ojo: oculta los montos y deja solo porcentajes.
 struct HideAmountsButton: View {
     @Environment(AppModel.self) private var model

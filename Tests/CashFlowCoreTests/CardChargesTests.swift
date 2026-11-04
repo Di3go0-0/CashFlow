@@ -382,3 +382,28 @@ import GRDB
         #expect(throws: AppDatabase.SurplusError.self) { try f.db.reuseSurplus(from: order.id!, to: elsewhere.id!, amount: 10_000) }
     }
 }
+
+
+@Suite struct InsightTests {
+    @Test func frequentConceptsSuggestionsHistoryAndYear() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let oct = YearMonth(year: 2026, month: 10)
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 3_000_000)))
+        try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 10, day: 5), amount: 40_000, currency: .cop, reason: "D1", fundId: f.compras.id))
+        try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 11, day: 2), amount: 45_000, currency: .cop, reason: "d1", fundId: f.compras.id))
+        try f.db.write { db in
+            var e = CardExpense(cardId: f.unica.id!, date: DayDate(year: 2026, month: 11, day: 6), amount: 30_000, currency: .cop, reason: "Gas")
+            try e.insert(db)
+        }
+        let snap = try f.db.snapshot()
+        let top = snap.frequentConcepts()
+        #expect(top.first?.name == "D1" && top.first?.count == 2 && top.first?.lastAmount == 45_000 && top.first?.lastFundId == f.compras.id)
+        #expect(snap.conceptSuggestions(matching: "ga").map(\.name) == ["Gas"])
+        #expect(snap.conceptSuggestions(matching: "ga").first?.lastCardId == f.unica.id)
+        let hist = snap.conceptHistory("D1", months: 2, ending: f.nov)
+        #expect(hist.map(\.total) == [40_000, 45_000] && hist.map(\.month) == [oct, f.nov])
+        let year = snap.yearSummary(2026)
+        #expect(year.count == 12 && year[10].income == 3_000_000 && year[10].spent == 75_000 && year[10].hasData && !year[0].hasData)
+    }
+}

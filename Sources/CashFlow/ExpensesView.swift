@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import Charts
 import GRDB
 import CashFlowCore
 
@@ -137,23 +138,27 @@ struct ExpensesView: View {
                 EmptyHint(text: T("Repeated concepts will show up here."))
             }
             ForEach(top) { c in
-                Button { query = c.name } label: {
+                NavigationLink {
+                    ConceptTrendView(name: c.name)
+                } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
                             Text(c.name)
                             Text(c.count == 1 ? T("Once") : T("%d times", c.count)).font(.caption2).foregroundStyle(.secondary)
                             Spacer()
-                            MoneyText(amount: c.total)
+                            MoneyText(amount: c.total, percentOf: model.percentBase)
                         }
                         ThinBar(fraction: Double(c.total) / Double(max(maxTotal, 1)), color: Theme.accent)
                     }
                 }
-                .tint(.primary)
+                .swipeActions(edge: .leading) {
+                    Button { query = c.name } label: { Label(T("Filter"), systemImage: "line.3.horizontal.decrease.circle") }.tint(Theme.accent)
+                }
             }
         } header: {
             Text(T("By concept"))
         } footer: {
-            Text(T("Tap a concept to filter the lists."))
+            Text(T("Tap a concept to see its trend; swipe to filter the lists."))
         }
     }
 
@@ -245,6 +250,8 @@ struct ExpenseRow: View {
 struct NewExpenseSheet: View {
     @Environment(AppModel.self) private var model
     var initialCardId: Int64?
+    /// Concepto y monto ya puestos (plantilla rápida).
+    var prefill: ExpensePrefill? = nil
     @State private var withCard = false
 
     var body: some View {
@@ -257,9 +264,9 @@ struct NewExpenseSheet: View {
             .padding()
             .background(.bar)
             if withCard {
-                CardExpenseEditView(expense: nil, defaultCardId: initialCardId)
+                CardExpenseEditView(expense: nil, defaultCardId: initialCardId, prefill: prefill)
             } else {
-                ExpenseEditView(expense: nil)
+                ExpenseEditView(expense: nil, prefill: prefill)
             }
         }
         .onAppear { withCard = initialCardId != nil }
@@ -273,9 +280,9 @@ struct ExpenseEditView: View {
     @State private var source: MoneySource = .extra
     private let isNew: Bool
 
-    init(expense: Expense?) {
+    init(expense: Expense?, prefill: ExpensePrefill? = nil) {
         isNew = expense == nil
-        _expense = State(initialValue: expense ?? Expense(date: .today(), amount: 0, currency: .cop, reason: "", fundId: nil))
+        _expense = State(initialValue: expense ?? Expense(date: .today(), amount: prefill?.amount ?? 0, currency: .cop, reason: prefill?.reason ?? "", fundId: prefill?.fundId))
     }
 
     var body: some View {
@@ -293,7 +300,7 @@ struct ExpenseEditView: View {
                     }
                 }
                 Section {
-                    TextField(T("Reason"), text: $expense.reason)
+                    ReasonField(reason: $expense.reason, amount: $expense.amount)
                     DayDatePicker(title: T("Date"), day: $expense.date)
                     BudgetMonthPicker(date: expense.date, budgetMonth: $expense.budgetMonth)
                     SourcePicker(source: $source, currentConsumableId: expense.consumableId, currentCommitmentId: expense.commitmentId)
@@ -337,6 +344,157 @@ struct ExpenseEditView: View {
                 }
             }
         }
+    }
+}
+
+/// Concepto y monto para abrir el editor ya llenado.
+struct ExpensePrefill: Hashable {
+    var reason: String
+    var amount: Int64
+    var fundId: Int64? = nil
+}
+
+/// Tendencia de un concepto: cuánto ha costado mes a mes y cada registro.
+struct ConceptTrendView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var scheme
+    var name: String
+    @State private var months = 6
+
+    private var points: [ConceptMonthPoint] { model.snapshot.conceptHistory(name, months: months, ending: model.month) }
+    private var key: String { Snapshot.normalizedConcept(name) }
+
+    var body: some View {
+        let total = points.reduce(0) { $0 + $1.total }
+        let count = points.reduce(0) { $0 + $1.count }
+        let active = points.filter { $0.count > 0 }.count
+        List {
+            Section {
+                GlassStatCard(
+                    title: T("Total in the last %d months", months),
+                    value: total,
+                    caption: count > 0 ? T("%d times · average %@ per month with spending", count, MoneyFormat.cop(active > 0 ? total / Int64(active) : 0)) : T("No spending in this range"),
+                    stats: [(T("Average per time"), count > 0 ? total / Int64(count) : 0), (T("This month"), points.last?.total ?? 0)],
+                    percentOf: model.percentBase, statsPercentOf: model.percentBase
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+            Section {
+                Picker(T("Range"), selection: $months) {
+                    Text(T("%d months", 6)).tag(6)
+                    Text(T("%d months", 12)).tag(12)
+                }
+                .pickerStyle(.segmented)
+                Chart(points) { p in
+                    BarMark(x: .value(T("Month"), L10n.shortMonthName(p.month.month)), y: .value(T("Amount"), p.total), width: .ratio(0.6))
+                        .cornerRadius(4)
+                        .foregroundStyle(p.month == model.activeMonth ? Palette.series(scheme)[0].opacity(0.45) : Palette.series(scheme)[0])
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine().foregroundStyle(.quaternary)
+                        AxisValueLabel { if let v = value.as(Int64.self) { Text(compactCOP(v)).font(.caption2) } }
+                    }
+                }
+                .chartXAxis { AxisMarks { _ in AxisValueLabel().font(.caption2) } }
+                .frame(height: 200)
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+            } header: {
+                Text(T("By month"))
+            }
+            Section(T("Each time")) {
+                let plain = model.snapshot.expenses.filter { Snapshot.normalizedConcept($0.reason) == key }.map { ($0.date, $0.amountCOP, model.snapshot.expenseSourceName($0)) }
+                let card = model.snapshot.cardExpenses.filter { Snapshot.normalizedConcept($0.reason) == key }.map { ($0.date, model.snapshot.netAmount(of: $0), model.snapshot.card($0.cardId)?.name ?? T("Credit card")) }
+                let rows = (plain + card).sorted { $0.0 > $1.0 }.prefix(60)
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(r.0.longDisplay)
+                            Text(r.2).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        MoneyText(amount: r.1, percentOf: model.percentBase)
+                    }
+                }
+            }
+        }
+        .auroraList()
+        .navigationTitle(name)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Un año de un vistazo: ingreso, gastado, ahorrado y restante por mes.
+struct YearSummaryView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var scheme
+    @State private var year: Int = YearMonth.current().year
+
+    var body: some View {
+        let rows = model.snapshot.yearSummary(year)
+        let withData = rows.filter(\.hasData)
+        let income = withData.reduce(0) { $0 + $1.income }
+        let spent = withData.reduce(0) { $0 + $1.spent }
+        let saved = withData.reduce(0) { $0 + $1.saved }
+        List {
+            Section {
+                HStack {
+                    Button { year -= 1 } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless)
+                    Spacer()
+                    Text(String(year)).font(.headline)
+                    Spacer()
+                    Button { year += 1 } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless)
+                }
+            }
+            Section {
+                GlassStatCard(
+                    title: T("Income in %d", year),
+                    value: income,
+                    caption: T("%d months with data", withData.count),
+                    stats: [(T("Spent"), spent), (T("Saved"), saved), (T("Remaining"), income - withData.reduce(0) { $0 + ($1.income - $1.remaining) })],
+                    percentOf: income, statsPercentOf: income
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+            Section {
+                IncomeSpentChart(points: rows.map { MonthPoint(month: $0.month, income: $0.income, spent: $0.spent) }, colors: Palette.series(scheme), inProgress: model.activeMonth)
+                    .frame(height: 220)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+            }
+            Section {
+                ForEach(rows) { r in
+                    Button {
+                        model.month = r.month
+                    } label: {
+                        HStack {
+                            Text(r.month.monthName).frame(width: 90, alignment: .leading)
+                                .foregroundStyle(r.hasData ? .primary : .secondary)
+                            Spacer()
+                            if r.hasData {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    MoneyText(amount: r.income, percentOf: income).font(.subheadline)
+                                    Text(T("spent %@ · saved %@", MoneyFormat.hidden ? Pct.string(r.spent, of: r.income) : MoneyFormat.cop(r.spent), MoneyFormat.hidden ? Pct.string(r.saved, of: r.income) : MoneyFormat.cop(r.saved)))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            } else {
+                                Text("—").foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    .tint(.primary)
+                }
+            } header: {
+                Text(T("Month by month"))
+            } footer: {
+                Text(T("Tap a month to open it in the other tabs."))
+            }
+        }
+        .auroraList()
+        .navigationTitle(T("Year at a glance"))
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { year = model.month.year }
     }
 }
 

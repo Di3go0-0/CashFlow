@@ -84,3 +84,89 @@ public enum CSVExport {
         return lines.joined(separator: "\n") + "\n"
     }
 }
+
+// MARK: - Conceptos frecuentes, tendencias y resumen anual
+
+/// Un concepto que el usuario repite, con lo que suele costar y cómo lo pagó la última vez.
+public struct ConceptSuggestion: Hashable, Sendable, Identifiable {
+    public var name: String
+    public var count: Int
+    public var lastAmount: Int64
+    public var lastDate: DayDate
+    /// Tarjeta con la que se pagó la última vez; nil si fue sin tarjeta.
+    public var lastCardId: Int64?
+    /// Fondo de origen la última vez (gasto sin tarjeta).
+    public var lastFundId: Int64?
+    public var id: String { name.lowercased() }
+}
+
+public struct ConceptMonthPoint: Hashable, Sendable, Identifiable {
+    public var month: YearMonth
+    public var total: Int64
+    public var count: Int
+    public var id: String { month.key }
+}
+
+public struct YearMonthSummary: Hashable, Sendable, Identifiable {
+    public var month: YearMonth
+    public var income: Int64
+    public var spent: Int64
+    public var saved: Int64
+    public var remaining: Int64
+    public var hasData: Bool
+    public var id: String { month.key }
+}
+
+public extension Snapshot {
+    /// Conceptos usados alguna vez, del más repetido al menos, con el último monto y medio de pago.
+    func frequentConcepts(limit: Int = 50) -> [ConceptSuggestion] {
+        struct Acc { var name: String; var count = 0; var lastAmount: Int64 = 0; var lastDate = DayDate(year: 1, month: 1, day: 1); var card: Int64?; var fund: Int64? }
+        var dict: [String: Acc] = [:]
+        func add(_ reason: String, _ amount: Int64, _ date: DayDate, card: Int64?, fund: Int64?) {
+            let key = Self.normalizedConcept(reason)
+            guard !key.isEmpty else { return }
+            var a = dict[key] ?? Acc(name: reason.trimmingCharacters(in: .whitespaces))
+            a.count += 1
+            if date >= a.lastDate { a.lastDate = date; a.lastAmount = amount; a.card = card; a.fund = fund; a.name = reason.trimmingCharacters(in: .whitespaces) }
+            dict[key] = a
+        }
+        for e in expenses { add(e.reason, e.amountCOP, e.date, card: nil, fund: e.fundId) }
+        for e in cardExpenses where !e.isGenerated { add(e.reason, e.amountCOP, e.date, card: e.cardId, fund: nil) }
+        return dict.values
+            .sorted { $0.count == $1.count ? $0.lastDate > $1.lastDate : $0.count > $1.count }
+            .prefix(limit)
+            .map { ConceptSuggestion(name: $0.name.prefix(1).uppercased() + $0.name.dropFirst(), count: $0.count, lastAmount: $0.lastAmount, lastDate: $0.lastDate, lastCardId: $0.card, lastFundId: $0.fund) }
+    }
+
+    /// Conceptos que contienen el texto escrito, para autocompletar mientras se escribe.
+    func conceptSuggestions(matching text: String, limit: Int = 6) -> [ConceptSuggestion] {
+        let q = Self.normalizedConcept(text)
+        let all = frequentConcepts(limit: 500)
+        guard !q.isEmpty else { return Array(all.prefix(limit)) }
+        let starts = all.filter { $0.name.lowercased().hasPrefix(q) }
+        let contains = all.filter { !$0.name.lowercased().hasPrefix(q) && $0.name.lowercased().contains(q) }
+        return Array((starts + contains).prefix(limit))
+    }
+
+    /// Total de un concepto por mes, en los últimos `months` meses terminando en `ending`.
+    func conceptHistory(_ name: String, months: Int = 6, ending: YearMonth) -> [ConceptMonthPoint] {
+        let key = Self.normalizedConcept(name)
+        return (0..<months).reversed().map { offset in
+            let m = ending.adding(months: -offset)
+            var total: Int64 = 0, count = 0
+            for e in expenses where e.month == m && Self.normalizedConcept(e.reason) == key { total += e.amountCOP; count += 1 }
+            for e in cardExpenses where e.month == m && Self.normalizedConcept(e.reason) == key { total += netAmount(of: e); count += 1 }
+            return ConceptMonthPoint(month: m, total: total, count: count)
+        }
+    }
+
+    /// Los doce meses de un año: ingreso, gastado, ahorrado y restante. `hasData` marca los que tienen proyección o movimientos.
+    func yearSummary(_ year: Int) -> [YearMonthSummary] {
+        (1...12).map { mo in
+            let m = YearMonth(year: year, month: mo)
+            let s = monthSummary(m)
+            let has = projection(for: m) != nil || s.income != 0 || s.spent != 0
+            return YearMonthSummary(month: m, income: s.income, spent: s.spent, saved: s.saved, remaining: s.remaining, hasData: has)
+        }
+    }
+}

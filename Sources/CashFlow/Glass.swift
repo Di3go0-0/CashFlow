@@ -128,6 +128,13 @@ struct FloatingAddButton: View {
     @Namespace private var ns
     @State private var open = false
     @State private var choice: Choice?
+    @State private var quick: QuickPick?
+    @State private var showQuick = false
+
+    struct QuickPick: Identifiable {
+        var suggestion: ConceptSuggestion
+        var id: String { suggestion.id }
+    }
     /// Qué opción preseleccionar si se abre directo (en la pestaña de tarjetas, con tarjeta).
     var preferCard = false
 
@@ -137,11 +144,30 @@ struct FloatingAddButton: View {
         GlassEffectContainer(spacing: 14) {
             VStack(alignment: .trailing, spacing: 14) {
                 if open {
+                    if showQuick {
+                        ForEach(model.snapshot.frequentConcepts(limit: 5)) { s in
+                            Button {
+                                withAnimation(.bouncy(duration: 0.3)) { open = false; showQuick = false }
+                                quick = QuickPick(suggestion: s)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: s.lastCardId != nil ? "creditcard" : "banknote").font(.caption)
+                                    Text(s.name).font(.subheadline.weight(.semibold))
+                                    Text(MoneyFormat.cop(s.lastAmount)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                                }
+                                .padding(.horizontal, 6).padding(.vertical, 6)
+                            }
+                            .buttonStyle(.glass)
+                            .tint(.primary)
+                            .glassEffectID("quick-" + s.id, in: ns)
+                            .transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
+                        }
+                    }
                     option(.card, T("Credit card"), "creditcard")
                     option(.plain, T("Transfer or cash"), "banknote")
                 }
                 Button {
-                    withAnimation(.bouncy(duration: 0.35)) { open.toggle() }
+                    withAnimation(.bouncy(duration: 0.35)) { open.toggle(); showQuick = false }
                 } label: {
                     Image(systemName: "plus")
                         .font(.title2.weight(.bold))
@@ -154,12 +180,19 @@ struct FloatingAddButton: View {
                 .tint(Theme.accent)
                 .glassEffectID("plus", in: ns)
                 .accessibilityLabel(T("New expense"))
+                .simultaneousGesture(LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                    withAnimation(.bouncy(duration: 0.35)) { open = true; showQuick = true }
+                })
             }
         }
         .padding(.trailing, 20)
         .padding(.bottom, 10)
         .sheet(item: $choice) { c in
             NewExpenseSheet(initialCardId: c == .card ? model.activeCards.first?.id : nil)
+        }
+        .sheet(item: $quick) { q in
+            NewExpenseSheet(initialCardId: q.suggestion.lastCardId,
+                            prefill: ExpensePrefill(reason: q.suggestion.name, amount: q.suggestion.lastAmount, fundId: q.suggestion.lastFundId))
         }
     }
 

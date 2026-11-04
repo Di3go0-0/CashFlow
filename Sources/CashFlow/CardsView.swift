@@ -364,9 +364,9 @@ struct CardExpenseEditView: View {
     @State private var isNew: Bool
     @State private var newAllocation: CardAllocation?
 
-    init(expense: CardExpense?, defaultCardId: Int64?) {
+    init(expense: CardExpense?, defaultCardId: Int64?, prefill: ExpensePrefill? = nil) {
         _isNew = State(initialValue: expense == nil)
-        _expense = State(initialValue: expense ?? CardExpense(cardId: defaultCardId ?? 0, date: .today(), amount: 0, currency: .cop, reason: ""))
+        _expense = State(initialValue: expense ?? CardExpense(cardId: defaultCardId ?? 0, date: .today(), amount: prefill?.amount ?? 0, currency: .cop, reason: prefill?.reason ?? ""))
     }
 
     @State private var addingRefund = false
@@ -420,7 +420,7 @@ struct CardExpenseEditView: View {
                 }
                 .disabled(expense.isGenerated)
                 Section {
-                    TextField(T("Reason"), text: $expense.reason)
+                    ReasonField(reason: $expense.reason, amount: $expense.amount)
                     DayDatePicker(title: T("Date"), day: $expense.date)
                     BudgetMonthPicker(date: expense.date, budgetMonth: $expense.budgetMonth)
                     Toggle(T("Already paid to the card"), isOn: $expense.isPaid)

@@ -109,6 +109,14 @@ struct SummaryView: View {
                 }
             }
 
+            Section {
+                NavigationLink {
+                    YearSummaryView()
+                } label: {
+                    Label(T("%d at a glance", model.month.year), systemImage: "calendar")
+                }
+            }
+
             Section(T("Credit cards")) {
                 let cards = model.cardStatuses
                 if cards.isEmpty {
