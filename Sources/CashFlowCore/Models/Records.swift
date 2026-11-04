@@ -207,6 +207,9 @@ public struct Fund: Codable, Identifiable, Hashable, Sendable, FetchableRecord, 
     public var isArchived: Bool
     /// Mes en que se creó. El saldo inicial solo se puede editar en ese mes.
     public var createdMonth: YearMonth
+    /// Meta: cuánto quiere juntarse en este fondo y, opcionalmente, para cuándo.
+    public var targetAmount: Int64? = nil
+    public var targetMonth: YearMonth? = nil
 
     public init(id: Int64? = nil, name: String, defaultContribution: Int64 = 0, resetsMonthly: Bool = false,
                 isSavings: Bool = false, initialBalance: Int64 = 0, cardId: Int64? = nil, sortOrder: Int = 0,

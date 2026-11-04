@@ -68,6 +68,7 @@ struct ScenarioEditView: View {
     @State private var editingIncome: IncomeDetail?
     @State private var showSources = false
     @AppStorage("scenario.collapsed") private var collapsedRaw = ""
+    @AppStorage("scenario.horizon") private var horizon = 6
 
     private var scenario: Scenario? { model.snapshot.scenarios.first { $0.id == scenarioId } }
 
@@ -126,6 +127,7 @@ struct ScenarioEditView: View {
                 kindSection(.consumable, title: T("Bills"), key: "bills", addLabel: T("Add bill"), lines: lines, income: sum.income, total: sum.consumables)
                 kindSection(.debt, title: T("Debts and installments"), key: "debts", addLabel: T("Add debt"), lines: lines, income: sum.income, total: sum.debts)
                 kindSection(.necessary, title: T("Necessary expenses"), key: "necessary", addLabel: T("Add necessary expense"), lines: lines, income: sum.income, total: sum.necessary)
+                horizonSection(s)
                 Section {
                     MonthSwitcher(month: $applyMonth)
                     Button {
@@ -231,6 +233,80 @@ struct ScenarioEditView: View {
         }
     }
 
+    /// Qué pasa con los fondos si este reparto se repite varios meses.
+    @ViewBuilder
+    private func horizonSection(_ s: Scenario) -> some View {
+        let start = max(model.activeMonth, model.month)
+        let points = model.snapshot.projectFunds(scenario: s, months: horizon, from: start, asOf: model.today)
+        let funds = model.activeFunds.filter { !$0.resetsMonthly }
+        let colors = Palette.series(scheme)
+        Section {
+            if !isCollapsed("horizon") {
+                Picker(T("Horizon"), selection: $horizon) {
+                    Text(T("%d months", 3)).tag(3)
+                    Text(T("%d months", 6)).tag(6)
+                    Text(T("%d months", 12)).tag(12)
+                }
+                .pickerStyle(.segmented)
+                if funds.isEmpty {
+                    EmptyHint(text: T("Only funds that accumulate are projected."))
+                } else {
+                    Chart {
+                        ForEach(Array(funds.enumerated()), id: \.element.id) { i, f in
+                            ForEach(points) { p in
+                                LineMark(x: .value(T("Month"), L10n.shortMonthName(p.month.month) + (p.month.month == 1 ? " " + String(p.month.year % 100) : "")),
+                                         y: .value(T("Balance"), p.balance(of: f.id!)))
+                                    .foregroundStyle(by: .value(T("Fund"), f.name))
+                                    .interpolationMethod(.monotone)
+                                PointMark(x: .value(T("Month"), L10n.shortMonthName(p.month.month) + (p.month.month == 1 ? " " + String(p.month.year % 100) : "")),
+                                          y: .value(T("Balance"), p.balance(of: f.id!)))
+                                    .foregroundStyle(by: .value(T("Fund"), f.name))
+                                    .symbolSize(18)
+                            }
+                        }
+                    }
+                    .chartForegroundStyleScale(domain: funds.map(\.name), range: Array((0..<funds.count).map { colors[$0 % colors.count] }))
+                    .chartLegend(position: .bottom, alignment: .leading, spacing: 6)
+                    .chartYAxis {
+                        AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                            AxisGridLine().foregroundStyle(.quaternary)
+                            AxisValueLabel { if let v = value.as(Int64.self) { Text(compactCOP(v)).font(.caption2) } }
+                        }
+                    }
+                    .chartXAxis { AxisMarks { _ in AxisValueLabel().font(.caption2) } }
+                    .frame(height: 220)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    if let last = points.last {
+                        ForEach(funds) { f in
+                            let end = last.balance(of: f.id!)
+                            let goal = model.snapshot.goalStatus(of: f, balance: end, asOf: model.today)
+                            MoneyRow(title: f.name, amount: end,
+                                     color: (goal?.target).map { end >= $0 ? .green : .primary } ?? .primary,
+                                     subtitle: goal.map { g in end >= g.target ? T("Goal of %@ reached by %@", MoneyFormat.cop(g.target), last.month.displayName) : T("%@ short of the goal by %@", MoneyFormat.cop(g.target - end), last.month.displayName) },
+                                     percentOf: goal?.target)
+                        }
+                        let plansEnding = model.snapshot.plans.filter { $0.endMonth >= start && $0.endMonth <= last.month }
+                        ForEach(plansEnding) { p in
+                            Label(T("%@ ends in %@", p.name, p.endMonth.displayName), systemImage: "checkmark.seal").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        } header: {
+            HStack {
+                collapsible(T("If you repeat this for %d months", horizon), key: "horizon")
+                Spacer()
+                if let last = points.last {
+                    MoneyText(amount: funds.reduce(0) { $0 + last.balance(of: $1.id!) }, percentOf: nil)
+                }
+            }
+        } footer: {
+            if !isCollapsed("horizon") {
+                Text(T("Starts from today's balances and adds this scenario's contributions each month from %@. Funds spent within the month are not shown.", start.displayName))
+            }
+        }
+    }
+
     /// Sección de una categoría, con las mismas filas y botones que la pestaña Mes.
     @ViewBuilder
     private func kindSection(_ kind: ScenarioLineKind, title: String, key: String, addLabel: String, lines: [ScenarioLine], income: Int64, total: Int64) -> some View {
@@ -255,7 +331,11 @@ struct ScenarioEditView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(l.name).strikethrough(!l.enabled, color: .secondary)
                                 if kind == .contribution, let f = model.snapshot.fund(l.fundId) {
-                                    Text(T("Balance today: %@", MoneyFormat.cop(model.snapshot.balance(of: f.id!, asOf: model.today)))).font(.caption).foregroundStyle(.secondary)
+                                    if let goal = model.snapshot.goalStatus(of: f, balance: model.snapshot.balance(of: f.id!, asOf: model.fundsAsOf), asOf: model.today) {
+                                        Text(goalCaption(goal)).font(.caption).foregroundStyle(goal.onTrack == false ? .orange : .secondary)
+                                    } else {
+                                        Text(T("Balance today: %@", MoneyFormat.cop(model.snapshot.balance(of: f.id!, asOf: model.today)))).font(.caption).foregroundStyle(.secondary)
+                                    }
                                 } else if kind != .income && income > 0 {
                                     Text(T("%@ of income", Pct.string(l.amount, of: income))).font(.caption).foregroundStyle(.secondary)
                                 }

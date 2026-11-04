@@ -79,6 +79,17 @@ struct FundsView: View {
     }
 }
 
+/// Texto corto del estado de una meta: "falta X · llegas en mayo" o "faltan X · necesitas Y al mes".
+func goalCaption(_ g: FundGoalStatus) -> String {
+    if g.reached { return T("Goal reached: %@", MoneyFormat.cop(g.target)) }
+    let left = MoneyFormat.hidden ? Pct.string(g.balance, of: g.target) + " " + T("of the goal") : T("%@ to go", MoneyFormat.cop(g.remaining))
+    if let required = g.requiredMonthly, let tm = g.targetMonth {
+        return left + " · " + T("%@ per month until %@", MoneyFormat.cop(required), tm.monthName)
+    }
+    if let eta = g.eta { return left + " · " + T("at this pace by %@", eta.displayName) }
+    return left
+}
+
 struct FundRow: View {
     @Environment(AppModel.self) private var model
     var report: FundReport
@@ -96,7 +107,10 @@ struct FundRow: View {
                     MoneyText(amount: report.balance, percentOf: report.fund.isCardPocket ? model.totalPocketBalance : model.totalFundBalance)
                         .foregroundStyle(report.balance.balanceColor)
                 }
-                if MoneyFormat.hidden {
+                if let goal = model.snapshot.goalStatus(of: report.fund, balance: report.balance, asOf: model.today) {
+                    ThinBar(fraction: goal.fraction, color: goal.reached ? .green : Palette.series(scheme)[index % 5])
+                    Text(goalCaption(goal)).font(.caption).foregroundStyle(goal.onTrack == false ? .orange : .secondary)
+                } else if MoneyFormat.hidden {
                     if report.contributedInMonth > 0 {
                         Text(T("%@ of this month's income", Pct.string(report.contributedInMonth, of: model.summary.income)))
                             .font(.caption).foregroundStyle(.secondary)
@@ -143,6 +157,22 @@ struct FundDetailView: View {
                     )
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+                }
+                if let goal = model.snapshot.goalStatus(of: r.fund, balance: r.balance, asOf: model.today) {
+                    Section {
+                        MoneyRow(title: T("Target amount"), amount: goal.target, percentOf: goal.target)
+                        MoneyRow(title: T("Still to go"), amount: goal.remaining, color: goal.reached ? .green : .primary, percentOf: goal.target)
+                        MoneyRow(title: T("Pace per month"), amount: goal.pace, subtitle: T("Average of recent contributions"), percentOf: goal.target)
+                        if let eta = goal.eta {
+                            LabeledContent(T("At this pace"), value: goal.reached ? T("Reached") : eta.displayName)
+                        }
+                        if let required = goal.requiredMonthly, let tm = goal.targetMonth {
+                            MoneyRow(title: T("Needed per month until %@", tm.monthName), amount: required,
+                                     color: goal.onTrack == false ? .orange : .green, percentOf: goal.target)
+                        }
+                    } header: {
+                        Text(T("Goal"))
+                    }
                 }
                 if r.fund.initialBalance != 0 {
                     Section {
@@ -298,6 +328,26 @@ struct FundEditView: View {
                     Toggle(T("Spent within the month"), isOn: $fund.resetsMonthly)
                 } footer: {
                     Text(T("Savings: its contributions count as saved in the summary. Spent within the month: shows how much of this month's contribution is left."))
+                }
+                if !fund.isCardPocket && !fund.resetsMonthly {
+                    Section {
+                        Toggle(T("Has a goal"), isOn: Binding(
+                            get: { fund.targetAmount != nil },
+                            set: { on in fund.targetAmount = on ? (fund.targetAmount ?? 0) : nil; if !on { fund.targetMonth = nil } }))
+                        if fund.targetAmount != nil {
+                            MoneyField(title: T("Target amount"), amount: Binding(get: { fund.targetAmount ?? 0 }, set: { fund.targetAmount = $0 }))
+                            Toggle(T("By a month"), isOn: Binding(
+                                get: { fund.targetMonth != nil },
+                                set: { on in fund.targetMonth = on ? (fund.targetMonth ?? model.activeMonth.adding(months: 6)) : nil }))
+                            if fund.targetMonth != nil {
+                                MonthSwitcher(month: Binding(get: { fund.targetMonth ?? model.activeMonth }, set: { fund.targetMonth = $0 }))
+                            }
+                        }
+                    } header: {
+                        Text(T("Goal"))
+                    } footer: {
+                        Text(T("The fund row shows how far you are and when you would get there at the current pace. With a month, also how much to contribute each month."))
+                    }
                 }
                 if !isNew && !fund.isCardPocket {
                     Section {

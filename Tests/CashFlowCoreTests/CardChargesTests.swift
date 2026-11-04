@@ -407,3 +407,34 @@ import GRDB
         #expect(year.count == 12 && year[10].income == 3_000_000 && year[10].spent == 75_000 && year[10].hasData && !year[0].hasData)
     }
 }
+
+
+@Suite struct GoalTests {
+    @Test func goalStatusAndFundProjection() throws {
+        let f = try Fixture()
+        // Meta: 1.824.000 para mayo de 2027; saldo 624.000; aporte 250.000.
+        try f.db.write { db in
+            var m = f.moto; m.targetAmount = 1_824_000; m.targetMonth = YearMonth(year: 2027, month: 5)
+            try m.update(db)
+        }
+        let p = try f.db.startMonth(f.nov)
+        try f.db.saveContribution(Contribution(projectionId: p.id!, fundId: f.moto.id!, amount: 250_000, date: f.nov.firstDay), asTemplate: false)
+        var snap = try f.db.snapshot()
+        let moto = snap.fund(f.moto.id)!
+        let today = DayDate(year: 2026, month: 11, day: 5)
+        let g = snap.goalStatus(of: moto, balance: 874_000, asOf: today)!
+        #expect(g.remaining == 950_000 && g.pace == 250_000)
+        #expect(g.eta == YearMonth(year: 2027, month: 3))          // 950.000 / 250.000 → 4 meses
+        #expect(g.requiredMonthly == 158_334 && g.onTrack == true) // 6 meses hasta mayo
+        #expect(snap.goalStatus(of: snap.fund(f.compras.id)!, balance: 0, asOf: today) == nil)
+
+        // Escenario que repite 250.000 al mes: en 6 meses el fondo llega a la meta.
+        let s = try f.db.createScenario(name: "Plan", basedOn: f.nov, today: today)
+        snap = try f.db.snapshot()
+        let points = snap.projectFunds(scenario: s, months: 6, from: f.dec, asOf: today)
+        #expect(points.count == 6 && points.first?.month == f.dec)
+        let start = snap.balance(of: f.moto.id!, asOf: f.nov.lastDay)
+        #expect(points.last!.balance(of: f.moto.id!) == start + 6 * 250_000)
+        #expect(points.last!.balances[f.compras.id!] == nil) // se gasta en el mes: no se proyecta
+    }
+}

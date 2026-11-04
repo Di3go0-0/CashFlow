@@ -345,6 +345,12 @@ public final class AppDatabase: Sendable {
                 t.column("note", .text).notNull().defaults(to: "")
             }
         }
+        m.registerMigration("v15") { db in
+            try db.alter(table: "fund") { t in
+                t.add(column: "targetAmount", .integer)
+                t.add(column: "targetMonth", .text)
+            }
+        }
         return m
     }
 }
