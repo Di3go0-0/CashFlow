@@ -713,6 +713,59 @@ public extension AppDatabase {
         }
     }
 
+    // MARK: Devoluciones
+
+    func addRefund(_ refund: CardRefund) throws {
+        try write { db in var r = refund; try r.save(db) }
+    }
+
+    func deleteRefunds(ids: [Int64]) throws {
+        try write { db in _ = try CardRefund.deleteAll(db, ids: ids) }
+    }
+
+    /// Cancela la compra completa: una devolución por lo que aún no se había devuelto.
+    func cancelCardExpense(id: Int64, on date: DayDate, note: String = "") throws {
+        let snap = try snapshot()
+        guard let e = snap.cardExpenses.first(where: { $0.id == id }) else { return }
+        let left = snap.netAmount(of: e)
+        guard left > 0 else { return }
+        try addRefund(CardRefund(cardExpenseId: id, date: date, amount: left, note: note))
+    }
+
+    enum SurplusError: Error { case nothingToReuse, differentCard, amountTooLarge }
+
+    /// Mueve abonos sobrantes de una compra (devuelta o sobreabonada) a otra compra de la misma tarjeta.
+    /// No mueve dinero: el bolsillo no cambia y cada abono conserva su origen. Parte el último abono si hace falta.
+    func reuseSurplus(from sourceId: Int64, to targetId: Int64, amount: Int64) throws {
+        let snap = try snapshot()
+        guard amount > 0,
+              let source = snap.cardExpenses.first(where: { $0.id == sourceId }),
+              let target = snap.cardExpenses.first(where: { $0.id == targetId }) else { throw SurplusError.nothingToReuse }
+        guard source.cardId == target.cardId else { throw SurplusError.differentCard }
+        let surplus = snap.status(of: source).surplus
+        guard amount <= surplus else { throw SurplusError.amountTooLarge }
+        try write { db in
+            var left = amount
+            let allocs = try CardAllocation.filter(Column("cardExpenseId") == sourceId).order(Column("date").desc, Column("id").desc).fetchAll(db)
+            for var a in allocs where left > 0 {
+                if a.amount <= left {
+                    a.cardExpenseId = targetId
+                    try a.update(db)
+                    left -= a.amount
+                } else {
+                    var moved = a
+                    moved.id = nil
+                    moved.cardExpenseId = targetId
+                    moved.amount = left
+                    try moved.insert(db)
+                    a.amount -= left
+                    try a.update(db)
+                    left = 0
+                }
+            }
+        }
+    }
+
     func payCard(_ payment: CardPayment, markPaidThrough: DayDate?, pocketBalanceAfter: Int64? = nil) throws {
         try write { db in
             var p = payment

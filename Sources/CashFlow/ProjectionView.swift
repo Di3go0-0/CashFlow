@@ -209,6 +209,13 @@ struct ScenarioEditView: View {
                 } label: {
                     Label(T("Add income"), systemImage: "plus")
                 }
+                let realCount = model.snapshot.incomes.filter { $0.income.month == model.month }.count
+                Button {
+                    model.perform { try model.db.copyIncomes(from: model.month, toScenario: scenarioId) }
+                } label: {
+                    Label(T("Bring from %@ (%d)", model.month.monthName, realCount), systemImage: "arrow.down.doc")
+                }
+                .disabled(realCount == 0)
             }
         } header: {
             HStack {
@@ -216,6 +223,10 @@ struct ScenarioEditView: View {
                 Spacer()
                 Button(T("Sources")) { showSources = true }.font(.caption)
                 MoneyText(amount: total)
+            }
+        } footer: {
+            if !isCollapsed("income") {
+                Text(T("Starts from the typical income of your recurring sources. Bring a real month's income when you are planning that month."))
             }
         }
     }

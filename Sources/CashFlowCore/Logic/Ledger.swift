@@ -22,6 +22,7 @@ public struct Snapshot: Sendable {
     public var cardExpenses: [CardExpense] = []
     public var allocations: [CardAllocation] = []
     public var payments: [CardPayment] = []
+    public var refunds: [CardRefund] = []
     public var scenarios: [Scenario] = []
     public var scenarioLines: [ScenarioLine] = []
     public var scenarioIncomes: [IncomeDetail] = []
@@ -53,6 +54,7 @@ public struct Snapshot: Sendable {
         s.cardExpenses = try CardExpense.order(Column("date").desc, Column("id").desc).fetchAll(db)
         s.allocations = try CardAllocation.fetchAll(db)
         s.payments = try CardPayment.fetchAll(db)
+        s.refunds = try CardRefund.order(Column("date"), Column("id")).fetchAll(db)
         s.scenarios = try Scenario.order(Column("createdAt").desc, Column("id").desc).fetchAll(db)
         s.scenarioLines = try ScenarioLine.fetchAll(db)
         return s
@@ -308,7 +310,7 @@ public extension Snapshot {
             + monthAllocs.filter(\.fromConsumables).reduce(0) { $0 + $1.amount }
             + consPaidDirect
 
-        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + $1.amountCOP } + consPaidDirect
+        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + netAmount(of: $1) } + consPaidDirect
         let commitmentsUnpaid = cms.filter { $0.kind != .adjustment }.reduce(0) { $0 + max(0, $1.amount - paid(toward: $1.id!)) }
 
         let fromExtra = ex.filter(\.isFromExtra).reduce(0) { $0 + $1.amountCOP }
@@ -326,16 +328,49 @@ public extension Snapshot {
 public struct CardExpenseStatus: Hashable, Sendable, Identifiable {
     public var expense: CardExpense
     public var allocations: [CardAllocation]
+    public var refunds: [CardRefund]
 
-    public init(expense: CardExpense, allocations: [CardAllocation]) {
+    public init(expense: CardExpense, allocations: [CardAllocation], refunds: [CardRefund] = []) {
         self.expense = expense
         self.allocations = allocations
+        self.refunds = refunds
     }
 
     public var id: Int64? { expense.id }
     public var allocated: Int64 { allocations.reduce(0) { $0 + $1.amount } }
+    /// Lo que el comercio devolvió.
+    public var refunded: Int64 { refunds.reduce(0) { $0 + $1.amount } }
+    /// Lo que de verdad se debe por este gasto después de devoluciones.
+    public var netAmount: Int64 { max(0, expense.amountCOP - refunded) }
+    /// Devuelto completo: ya no es gasto ni deuda.
+    public var isCancelled: Bool { expense.amountCOP > 0 && refunded >= expense.amountCOP }
     /// Lo que falta amortiguar: pasar a un bolsillo para poder pagarlo.
-    public var uncovered: Int64 { max(0, expense.amountCOP - allocated) }
+    public var uncovered: Int64 { max(0, netAmount - allocated) }
+    /// Abonos que sobran respecto al neto (por devolución o sobreabono): plata en el bolsillo reutilizable en otra compra.
+    public var surplus: Int64 { max(0, allocated - netAmount) }
+}
+
+public extension Snapshot {
+    /// Estado de un gasto de tarjeta con sus abonos y devoluciones.
+    func status(of expense: CardExpense) -> CardExpenseStatus {
+        CardExpenseStatus(expense: expense,
+                          allocations: allocations.filter { $0.cardExpenseId == expense.id },
+                          refunds: refunds.filter { $0.cardExpenseId == expense.id })
+    }
+
+    /// Estados de todos los gastos de una tarjeta.
+    func statuses(cardId: Int64) -> [CardExpenseStatus] {
+        let allocByExpense = Dictionary(grouping: allocations, by: \.cardExpenseId)
+        let refundsByExpense = Dictionary(grouping: refunds, by: \.cardExpenseId)
+        return cardExpenses.filter { $0.cardId == cardId }.map {
+            CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? [], refunds: refundsByExpense[$0.id!] ?? [])
+        }
+    }
+
+    /// Neto de un gasto de tarjeta (monto menos devoluciones).
+    func netAmount(of expense: CardExpense) -> Int64 {
+        max(0, expense.amountCOP - refunds.filter { $0.cardExpenseId == expense.id }.reduce(0) { $0 + $1.amount })
+    }
 }
 
 public struct CardStatus: Hashable, Sendable, Identifiable {
@@ -379,10 +414,7 @@ public struct CardCycleReport: Hashable, Sendable {
 public extension Snapshot {
     func cardStatus(_ card: Card, asOf: DayDate) -> CardStatus {
         let cardId = card.id!
-        let allocByExpense = Dictionary(grouping: allocations, by: \.cardExpenseId)
-        let statuses = cardExpenses.filter { $0.cardId == cardId }.map {
-            CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? [])
-        }
+        let statuses = self.statuses(cardId: cardId)
         let unpaid = statuses.filter { !$0.expense.isPaid && $0.expense.date <= asOf }
         let cycle = card.cycle(containing: asOf)
         let prevEnd = cycle.previous.end
@@ -392,11 +424,11 @@ public extension Snapshot {
             card: card,
             pocket: pocket,
             cycle: cycle,
-            debt: unpaid.reduce(0) { $0 + $1.expense.amountCOP },
+            debt: unpaid.reduce(0) { $0 + $1.netAmount },
             uncovered: unpaid.reduce(0) { $0 + $1.uncovered },
             pocketBalance: pocket.map { balance(of: $0.id!, asOf: asOf) } ?? 0,
-            cycleTotal: statuses.filter { cycle.contains($0.expense.date) }.reduce(0) { $0 + $1.expense.amountCOP },
-            dueNow: unpaid.filter { $0.expense.date <= prevEnd }.reduce(0) { $0 + $1.expense.amountCOP },
+            cycleTotal: statuses.filter { cycle.contains($0.expense.date) }.reduce(0) { $0 + $1.netAmount },
+            dueNow: unpaid.filter { $0.expense.date <= prevEnd }.reduce(0) { $0 + $1.netAmount },
             expenses: statuses,
             installmentsOutstanding: cardPlans.reduce(0) { $0 + $1.outstanding(after: asOf.yearMonth) },
             plans: cardPlans
@@ -406,9 +438,7 @@ public extension Snapshot {
     /// Lo que pasó con un ciclo de la tarjeta: cuánto se cargó, cuánto se apartó, qué se pagó y cómo quedó el bolsillo.
     func cycleReport(card: Card, cycle: CardCycle) -> CardCycleReport {
         let cardId = card.id!
-        let allocByExpense = Dictionary(grouping: allocations, by: \.cardExpenseId)
-        let items = cardExpenses.filter { $0.cardId == cardId && cycle.contains($0.date) }
-            .map { CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? []) }
+        let items = statuses(cardId: cardId).filter { cycle.contains($0.expense.date) }
         // Un pago pertenece al ciclo que el usuario eligió; si no eligió, al ciclo cuyo corte quedó entre
         // ese corte (incluido) y el día antes del siguiente.
         let nextEnd = cycle.next.end
@@ -422,9 +452,9 @@ public extension Snapshot {
         return CardCycleReport(
             cycle: cycle,
             expenses: items,
-            charged: items.reduce(0) { $0 + $1.expense.amountCOP },
-            allocated: items.reduce(0) { $0 + min($1.allocated, $1.expense.amountCOP) },
-            unpaid: items.filter { !$0.expense.isPaid }.reduce(0) { $0 + $1.expense.amountCOP },
+            charged: items.reduce(0) { $0 + $1.netAmount },
+            allocated: items.reduce(0) { $0 + min($1.allocated, $1.netAmount) },
+            unpaid: items.filter { !$0.expense.isPaid }.reduce(0) { $0 + $1.netAmount },
             payments: pays,
             pocketAfterPayment: after,
             statementTotal: pays.compactMap(\.statementAmount).last

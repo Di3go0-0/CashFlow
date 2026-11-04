@@ -171,6 +171,22 @@ public extension AppDatabase {
         }
     }
 
+    /// Reemplaza los ingresos del escenario por los de un mes real, con su desglose.
+    func copyIncomes(from month: YearMonth, toScenario scenarioId: Int64) throws {
+        let snap = try snapshot()
+        let source = snap.incomes.filter { $0.income.month == month && $0.net > 0 }
+        try write { db in
+            try Income.filter(Column("scenarioId") == scenarioId).deleteAll(db)
+            for d in source {
+                var inc = Income(sourceId: d.income.sourceId, month: month, date: month.firstDay, grossAmount: d.income.grossAmount, netAmount: d.income.netAmount, status: .confirmed)
+                inc.scenarioId = scenarioId
+                try inc.insert(db)
+                for x in d.deductions { var c = IncomeDeduction(incomeId: inc.id!, name: x.name, kind: x.kind, value: x.value); try c.insert(db) }
+                for b in d.bonuses { var c = IncomeBonus(incomeId: inc.id!, name: b.name, amount: b.amount); try c.insert(db) }
+            }
+        }
+    }
+
     func saveScenario(_ scenario: Scenario) throws {
         try write { db in var s = scenario; try s.save(db) }
     }

@@ -336,6 +336,15 @@ public final class AppDatabase: Sendable {
                 t.add(column: "scenarioId", .integer).indexed().references("scenario", onDelete: .cascade)
             }
         }
+        m.registerMigration("v14") { db in
+            try db.create(table: "cardRefund") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("cardExpenseId", .integer).notNull().indexed().references("cardExpense", onDelete: .cascade)
+                t.column("date", .text).notNull()
+                t.column("amount", .integer).notNull()
+                t.column("note", .text).notNull().defaults(to: "")
+            }
+        }
         return m
     }
 }

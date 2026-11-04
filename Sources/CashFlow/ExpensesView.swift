@@ -28,10 +28,8 @@ struct ExpensesView: View {
     }
 
     private func monthCardExpenses(_ cardId: Int64) -> [CardExpenseStatus] {
-        let allocByExpense = Dictionary(grouping: model.snapshot.allocations, by: \.cardExpenseId)
-        return model.snapshot.cardExpenses
-            .filter { $0.cardId == cardId && $0.month == model.month && matches($0.reason) }
-            .map { CardExpenseStatus(expense: $0, allocations: allocByExpense[$0.id!] ?? []) }
+        return model.snapshot.statuses(cardId: cardId)
+            .filter { $0.expense.month == model.month && matches($0.expense.reason) }
     }
 
     private var visibleCards: [Card] {

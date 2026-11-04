@@ -707,6 +707,28 @@ public struct CardAllocation: Codable, Identifiable, Hashable, Sendable, Fetchab
 }
 
 /// Pago real a la tarjeta. Sale del bolsillo de pago.
+/// Devolución del comercio sobre un gasto de tarjeta: baja el monto neto. Si cubre todo el gasto, la compra queda cancelada.
+public struct CardRefund: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "cardRefund"
+
+    public var id: Int64?
+    public var cardExpenseId: Int64
+    public var date: DayDate
+    /// Siempre en pesos.
+    public var amount: Int64
+    public var note: String
+
+    public init(id: Int64? = nil, cardExpenseId: Int64, date: DayDate, amount: Int64, note: String = "") {
+        self.id = id
+        self.cardExpenseId = cardExpenseId
+        self.date = date
+        self.amount = amount
+        self.note = note
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
 public struct CardPayment: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "cardPayment"
 

@@ -170,6 +170,11 @@ struct CardDetailView: View {
                         }
                     }
                     .tint(.primary)
+                    let surplus = st.expenses.reduce(0) { $0 + $1.surplus }
+                    if surplus > 0 {
+                        MoneyRow(title: T("Surplus from refunds"), amount: surplus, color: .orange,
+                                 subtitle: T("Reusable in another purchase: open the refunded one"))
+                    }
                     MoneyRow(title: T("Still to set aside"), amount: st.uncovered, color: st.uncovered > 0 ? .red : .secondary,
                              subtitle: T("Unpaid expenses without a full top-up"))
                     if st.dueNow > 0 {
@@ -314,6 +319,11 @@ struct CardExpenseRow: View {
                 Text(e.reason.isEmpty ? T("No description") : e.reason)
                 HStack(spacing: 6) {
                     Text(e.date.shortDisplay)
+                    if status.isCancelled {
+                        Label(T("Cancelled"), systemImage: "arrow.uturn.backward.circle").foregroundStyle(.secondary)
+                    } else if status.refunded > 0 {
+                        Label(T("Refunded %@", MoneyFormat.cop(status.refunded)), systemImage: "arrow.uturn.backward.circle").foregroundStyle(.secondary)
+                    }
                     if let bm = e.budgetMonth, bm != e.date.yearMonth {
                         Label(T("Counts for %@", bm.displayName), systemImage: "calendar.badge.clock").foregroundStyle(Theme.accent)
                     }
@@ -336,7 +346,9 @@ struct CardExpenseRow: View {
             }
             Spacer()
             VStack(alignment: .trailing) {
-                MoneyText(amount: e.amountCOP, percentOf: model.percentBase)
+                MoneyText(amount: status.netAmount, percentOf: model.percentBase)
+                    .strikethrough(status.isCancelled, color: .secondary)
+                    .foregroundStyle(status.isCancelled ? .secondary : .primary)
                 if e.currency == .usd {
                     Text(MoneyFormat.usd(cents: e.amount)).font(.caption).foregroundStyle(.secondary)
                 }
@@ -357,13 +369,30 @@ struct CardExpenseEditView: View {
         _expense = State(initialValue: expense ?? CardExpense(cardId: defaultCardId ?? 0, date: .today(), amount: 0, currency: .cop, reason: ""))
     }
 
+    @State private var addingRefund = false
+    @State private var reusing = false
+
     private var allocations: [CardAllocation] {
         guard let id = expense.id else { return [] }
         return model.snapshot.allocations.filter { $0.cardExpenseId == id }.sorted { $0.date > $1.date }
     }
 
+    /// Estado vivo del gasto (abonos y devoluciones) tal como está guardado.
+    private var status: CardExpenseStatus? {
+        guard let id = expense.id, let saved = model.snapshot.cardExpenses.first(where: { $0.id == id }) else { return nil }
+        return model.snapshot.status(of: saved)
+    }
+
+    private var refunds: [CardRefund] { status?.refunds ?? [] }
+    private var netAmount: Int64 { status?.netAmount ?? expense.amountCOP }
+
     private var uncovered: Int64 {
-        max(0, expense.amountCOP - allocations.reduce(0) { $0 + $1.amount })
+        max(0, netAmount - allocations.reduce(0) { $0 + $1.amount })
+    }
+
+    /// Otras compras de la misma tarjeta con sobrante por devolución.
+    private var refundedSources: [CardExpenseStatus] {
+        model.snapshot.statuses(cardId: expense.cardId).filter { $0.surplus > 0 && $0.expense.id != expense.id }
     }
 
     var body: some View {
@@ -423,11 +452,18 @@ struct CardExpenseEditView: View {
                         } label: {
                             Label(T("Add top-up"), systemImage: "plus")
                         }
+                        if uncovered > 0 && !refundedSources.isEmpty {
+                            Button {
+                                reusing = true
+                            } label: {
+                                Label(T("Reuse surplus from a refunded purchase"), systemImage: "arrow.uturn.backward.circle")
+                            }
+                        }
                     } header: {
                         HStack {
                             Text(T("Top-ups to the payment pocket"))
                             Spacer()
-                            let over = allocations.reduce(0) { $0 + $1.amount } - expense.amountCOP
+                            let over = allocations.reduce(0) { $0 + $1.amount } - netAmount
                             if over > 0 {
                                 Text(T("Over by %@", MoneyFormat.cop(over))).foregroundStyle(.orange)
                             } else {
@@ -437,6 +473,47 @@ struct CardExpenseEditView: View {
                         }
                     } footer: {
                         Text(T("Each top-up moves money into the card's payment pocket from a fund, the extra balance or the bills pool (whose item gets marked as paid)."))
+                    }
+
+                    Section {
+                        ForEach(refunds) { r in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(r.note.isEmpty ? T("Refund") : r.note)
+                                    Text(r.date.longDisplay).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                MoneyText(amount: -r.amount, showSign: true).foregroundStyle(.secondary)
+                            }
+                        }
+                        .onDelete { idx in
+                            let ids = idx.map { refunds[$0].id! }
+                            model.perform { try model.db.deleteRefunds(ids: ids) }
+                        }
+                        if let st = status, st.refunded > 0 {
+                            MoneyRow(title: T("Net after refunds"), amount: st.netAmount, emphasis: true,
+                                     subtitle: st.isCancelled ? T("Cancelled: it no longer counts as spending or debt") : T("Refunded %@ of %@", MoneyFormat.cop(st.refunded), MoneyFormat.cop(expense.amountCOP)))
+                        }
+                        if let st = status, st.surplus > 0 {
+                            MoneyRow(title: T("Free to reuse"), amount: st.surplus, color: .orange,
+                                     subtitle: T("Top-ups that exceed the net. The money is in the pocket."))
+                            Button {
+                                reusing = true
+                            } label: {
+                                Label(T("Reuse in another purchase"), systemImage: "arrow.right.circle")
+                            }
+                        }
+                        if !(status?.isCancelled ?? false) {
+                            Button {
+                                addingRefund = true
+                            } label: {
+                                Label(T("Add refund"), systemImage: "plus")
+                            }
+                        }
+                    } header: {
+                        Text(T("Refunds"))
+                    } footer: {
+                        Text(T("A refund from the merchant lowers what you really owe. Its top-ups stay in the pocket and can be reused in another purchase on the same credit card."))
                     }
                 } else {
                     Section {
@@ -463,6 +540,14 @@ struct CardExpenseEditView: View {
                 }
             }
             .sheet(item: $newAllocation) { AllocationEditView(allocation: $0) }
+            .sheet(isPresented: $addingRefund) {
+                if let st = status { RefundEditView(status: st) }
+            }
+            .sheet(isPresented: $reusing) {
+                if let st = status {
+                    ReuseSurplusView(cardId: expense.cardId, fixedSource: st.surplus > 0 ? st : nil, fixedTarget: st.surplus > 0 ? nil : st)
+                }
+            }
         }
     }
 
@@ -491,7 +576,7 @@ struct AllocationEditView: View {
     private var remainingToCover: Int64 {
         guard let e = model.snapshot.cardExpenses.first(where: { $0.id == allocation.cardExpenseId }) else { return 0 }
         let others = model.snapshot.allocations.filter { $0.cardExpenseId == e.id && $0.id != allocation.id }.reduce(0) { $0 + $1.amount }
-        return max(0, e.amountCOP - others)
+        return max(0, model.snapshot.netAmount(of: e) - others)
     }
 
     var body: some View {
@@ -671,6 +756,149 @@ struct CardPaymentView: View {
                         if model.perform({ try model.db.payCard(p, markPaidThrough: through, pocketBalanceAfter: target) }) { dismiss() }
                     }
                     .disabled(amount <= 0)
+                }
+            }
+        }
+    }
+}
+
+/// Registrar una devolución del comercio sobre un gasto de tarjeta.
+struct RefundEditView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var status: CardExpenseStatus
+    @State private var amount: Int64 = 0
+    @State private var date: DayDate = .today()
+    @State private var note = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    MoneyField(title: T("Refunded amount"), amount: $amount)
+                    DayDatePicker(title: T("Date"), day: $date)
+                    TextField(T("Note"), text: $note)
+                } footer: {
+                    Text(T("Net so far: %@. The refund lowers it; the top-ups stay in the pocket.", MoneyFormat.cop(status.netAmount)))
+                }
+                Section {
+                    Button(role: .destructive) {
+                        amount = status.netAmount
+                        save()
+                    } label: {
+                        Label(T("Cancel the whole purchase"), systemImage: "xmark.circle")
+                    }
+                } footer: {
+                    Text(T("Records a refund for everything still owed. The purchase stops counting as spending and debt."))
+                }
+            }
+            .auroraList()
+            .keyboardDismissal()
+            .navigationTitle(T("Refund"))
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { date = model.today }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(T("Save")) { save() }
+                        .disabled(amount <= 0 || amount > status.netAmount)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        let r = CardRefund(cardExpenseId: status.expense.id!, date: date, amount: amount, note: note)
+        if model.perform({ try model.db.addRefund(r) }) { dismiss() }
+    }
+}
+
+/// Mover abonos sobrantes de una compra devuelta a otra compra de la misma tarjeta.
+struct ReuseSurplusView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var cardId: Int64
+    /// Compra con sobrante ya elegida, o nil para escogerla.
+    var fixedSource: CardExpenseStatus?
+    /// Compra destino ya elegida, o nil para escogerla.
+    var fixedTarget: CardExpenseStatus?
+    @State private var sourceId: Int64?
+    @State private var targetId: Int64?
+    @State private var amount: Int64 = 0
+
+    private var sources: [CardExpenseStatus] {
+        model.snapshot.statuses(cardId: cardId).filter { $0.surplus > 0 }.sorted { $0.expense.date > $1.expense.date }
+    }
+    private var targets: [CardExpenseStatus] {
+        model.snapshot.statuses(cardId: cardId)
+            .filter { !$0.expense.isPaid && !$0.isCancelled && $0.uncovered > 0 && $0.expense.id != sourceId }
+            .sorted { $0.expense.date > $1.expense.date }
+    }
+    private var source: CardExpenseStatus? { sources.first { $0.expense.id == sourceId } }
+    private var target: CardExpenseStatus? { targets.first { $0.expense.id == targetId } }
+    private var maxAmount: Int64 { min(source?.surplus ?? 0, target?.uncovered ?? 0) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    if let fixedSource {
+                        LabeledContent(T("Source purchase"), value: fixedSource.expense.reason)
+                    } else {
+                        Picker(T("Source purchase"), selection: $sourceId) {
+                            Text(T("Choose")).tag(Int64?.none)
+                            ForEach(sources) { s in
+                                Text("\(s.expense.reason) · \(MoneyFormat.cop(s.surplus))").tag(Int64?.some(s.expense.id!))
+                            }
+                        }
+                    }
+                    if let source {
+                        MoneyRow(title: T("Free to reuse"), amount: source.surplus, color: .secondary)
+                    }
+                }
+                Section {
+                    if let fixedTarget {
+                        LabeledContent(T("Target purchase"), value: fixedTarget.expense.reason)
+                    } else {
+                        Picker(T("Target purchase"), selection: $targetId) {
+                            Text(T("Choose")).tag(Int64?.none)
+                            ForEach(targets) { t in
+                                Text("\(t.expense.reason) · \(T("Missing %@", MoneyFormat.cop(t.uncovered)))").tag(Int64?.some(t.expense.id!))
+                            }
+                        }
+                    }
+                    if let target {
+                        MoneyRow(title: T("Still to cover"), amount: target.uncovered, color: .secondary)
+                    }
+                }
+                Section {
+                    MoneyField(title: T("Amount to move"), amount: $amount)
+                        .onChange(of: maxAmount) { _, m in amount = m }
+                    if amount > maxAmount {
+                        Label(T("At most %@", MoneyFormat.cop(maxAmount)), systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
+                    }
+                } footer: {
+                    Text(T("The top-ups move to the other purchase keeping where the money came from. The pocket balance does not change."))
+                }
+            }
+            .auroraList()
+            .keyboardDismissal()
+            .navigationTitle(T("Reuse surplus"))
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                sourceId = fixedSource?.expense.id ?? sources.first?.expense.id
+                targetId = fixedTarget?.expense.id ?? targets.first?.expense.id
+                amount = maxAmount
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(T("Move")) {
+                        guard let s = sourceId, let t = targetId else { return }
+                        let a = amount
+                        if model.perform({ try model.db.reuseSurplus(from: s, to: t, amount: a) }) { dismiss() }
+                    }
+                    .disabled(sourceId == nil || targetId == nil || amount <= 0 || amount > maxAmount)
                 }
             }
         }

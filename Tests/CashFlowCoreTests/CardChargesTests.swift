@@ -282,4 +282,103 @@ import GRDB
         #expect(d.net == 4_500_000 - 360_000 + 232_489)
         #expect(snap.scenarioSummary(s).income == 4_372_489)
     }
+
+    @Test func scenarioCanTakeARealMonthsIncome() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, grossAmount: 5_000_000),
+                                         deductions: [.init(incomeId: 0, name: "Health", kind: .percent, value: 400)]))
+        let s = try f.db.createScenario(name: "Nov", basedOn: f.nov, today: DayDate(year: 2026, month: 11, day: 5))
+        try f.db.copyIncomes(from: f.nov, toScenario: s.id!)
+        let snap = try f.db.snapshot()
+        #expect(snap.scenarioIncomes(of: s.id!).count == 1)
+        #expect(snap.scenarioSummary(s).income == 4_800_000)
+        #expect(snap.monthSummary(f.nov).income == 4_800_000)
+    }
+}
+
+@Suite struct RefundTests {
+    private func purchase(_ f: Fixture, _ reason: String, _ amount: Int64, day: Int) throws -> CardExpense {
+        try f.db.write { db in
+            var e = CardExpense(cardId: f.unica.id!, date: DayDate(year: 2026, month: 11, day: day), amount: amount, currency: .cop, reason: reason)
+            try e.insert(db)
+            return e
+        }
+    }
+
+    @Test func partialRefundLowersTheNetAndLeavesReusableSurplus() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let order = try purchase(f, "Order", 200_000, day: 2)
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: order.id!, fundId: f.compras.id, amount: 200_000, date: order.date))
+        try f.db.addRefund(CardRefund(cardExpenseId: order.id!, date: DayDate(year: 2026, month: 11, day: 3), amount: 89_900, note: "Item cancelled"))
+        let snap = try f.db.snapshot()
+        let st = snap.status(of: order)
+        #expect(st.refunded == 89_900 && st.netAmount == 110_100 && !st.isCancelled)
+        #expect(st.uncovered == 0 && st.surplus == 89_900)
+        let asOf = DayDate(year: 2026, month: 11, day: 5)
+        #expect(snap.cardStatus(f.unica, asOf: asOf).debt == 110_100)
+        #expect(snap.monthSummary(f.nov).spent == 110_100)
+        #expect(snap.conceptTotals(for: f.nov).first?.total == 110_100)
+        #expect(snap.cycleReport(card: f.unica, cycle: f.unica.cycle(containing: order.date)).charged == 110_100)
+    }
+
+    @Test func cancellingRemovesTheExpenseFromEverything() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let order = try purchase(f, "Order", 50_000, day: 2)
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: order.id!, fundId: nil, amount: 50_000, date: order.date))
+        try f.db.cancelCardExpense(id: order.id!, on: DayDate(year: 2026, month: 11, day: 4))
+        var snap = try f.db.snapshot()
+        let st = snap.status(of: order)
+        #expect(st.isCancelled && st.netAmount == 0 && st.surplus == 50_000)
+        #expect(snap.cardStatus(f.unica, asOf: DayDate(year: 2026, month: 11, day: 5)).debt == 0)
+        #expect(snap.monthSummary(f.nov).spent == 0)
+        // Deshacer: borrar la devolución.
+        try f.db.deleteRefunds(ids: snap.refunds.map { $0.id! })
+        snap = try f.db.snapshot()
+        #expect(snap.status(of: order).netAmount == 50_000)
+    }
+
+    @Test func reusingSurplusMovesTopUpsWithoutMovingMoney() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov)
+        try f.db.saveCommitment(Commitment(projectionId: p.id!, kind: .necessary, name: "Gear", amount: 200_000, date: f.nov.firstDay), asTemplate: false)
+        let commitment = try f.db.snapshot().commitments.first { $0.name == "Gear" }!
+        let order = try purchase(f, "Order", 200_000, day: 2)
+        // Dos abonos: 150.000 desde el compromiso y 50.000 desde un fondo.
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: order.id!, fundId: nil, amount: 150_000, date: order.date, commitmentId: commitment.id))
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: order.id!, fundId: f.compras.id, amount: 50_000, date: DayDate(year: 2026, month: 11, day: 3)))
+        try f.db.addRefund(CardRefund(cardExpenseId: order.id!, date: DayDate(year: 2026, month: 11, day: 3), amount: 89_900))
+        let replacement = try purchase(f, "Replacement", 120_000, day: 6)
+
+        var snap = try f.db.snapshot()
+        let pocket = snap.pocket(of: f.unica.id!)!
+        let asOf = DayDate(year: 2026, month: 11, day: 10)
+        let pocketBefore = snap.balance(of: pocket.id!, asOf: asOf)
+        let comprasBefore = snap.balance(of: f.compras.id!, asOf: asOf)
+
+        try f.db.reuseSurplus(from: order.id!, to: replacement.id!, amount: 89_900)
+        snap = try f.db.snapshot()
+        let src = snap.status(of: order), dst = snap.status(of: replacement)
+        #expect(src.surplus == 0 && src.uncovered == 0 && src.allocated == 110_100)
+        #expect(dst.allocated == 89_900 && dst.uncovered == 30_100)
+        // El abono del fondo (50.000, el más reciente) se movió entero y el del compromiso se partió (39.900).
+        #expect(dst.allocations.contains { $0.fundId == f.compras.id && $0.amount == 50_000 })
+        #expect(dst.allocations.contains { $0.commitmentId == commitment.id && $0.amount == 39_900 })
+        #expect(snap.paid(toward: commitment.id!) == 150_000)
+        #expect(snap.balance(of: pocket.id!, asOf: asOf) == pocketBefore)
+        #expect(snap.balance(of: f.compras.id!, asOf: asOf) == comprasBefore)
+        #expect(snap.cardStatus(f.unica, asOf: asOf).debt == 110_100 + 120_000)
+
+        // Más de lo que sobra, o a otra tarjeta: se rechaza.
+        #expect(throws: AppDatabase.SurplusError.self) { try f.db.reuseSurplus(from: order.id!, to: replacement.id!, amount: 1) }
+        let other = try f.db.createCard(Card(name: "Other", creditLimit: 1_000_000, cutDay: 10, payDay: 20))
+        let elsewhere = try f.db.write { db -> CardExpense in
+            var e = CardExpense(cardId: other.id!, date: DayDate(year: 2026, month: 11, day: 6), amount: 10_000, currency: .cop, reason: "X")
+            try e.insert(db); return e
+        }
+        try f.db.addRefund(CardRefund(cardExpenseId: order.id!, date: DayDate(year: 2026, month: 11, day: 7), amount: 10_000))
+        #expect(throws: AppDatabase.SurplusError.self) { try f.db.reuseSurplus(from: order.id!, to: elsewhere.id!, amount: 10_000) }
+    }
 }
