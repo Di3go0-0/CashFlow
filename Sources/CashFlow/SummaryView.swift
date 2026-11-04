@@ -31,6 +31,25 @@ struct SummaryView: View {
                 }
             }
 
+            let alerts = model.snapshot.paceAlerts(month: model.month, asOf: model.today)
+            if !alerts.isEmpty {
+                Section {
+                    ForEach(alerts) { a in
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(a.title)
+                                Text(a.detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: a.kind == .pocketShort ? "creditcard.trianglebadge.exclamationmark" : "gauge.with.needle")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                } header: {
+                    Text(T("Heads up"))
+                }
+            }
+
             let red = model.fundsInTheRed
             if !red.isEmpty {
                 Section {

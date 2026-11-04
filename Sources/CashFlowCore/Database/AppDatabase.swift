@@ -351,6 +351,9 @@ public final class AppDatabase: Sendable {
                 t.add(column: "targetMonth", .text)
             }
         }
+        m.registerMigration("v16") { db in
+            try db.alter(table: "consumable") { t in t.add(column: "isRecurring", .boolean).notNull().defaults(to: false) }
+        }
         return m
     }
 }

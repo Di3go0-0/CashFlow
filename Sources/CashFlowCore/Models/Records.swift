@@ -527,6 +527,8 @@ public struct Consumable: Codable, Identifiable, Hashable, Sendable, FetchableRe
     public var sortOrder: Int
     /// Ajuste de cierre: solo mueve el presupuesto del apartado, no cuenta como gasto ni como ítem por pagar.
     public var isAdjustment: Bool
+    /// Se repite cada mes: `startMonth` lo crea solo a partir del mes anterior.
+    public var isRecurring: Bool = false
 
     public init(id: Int64? = nil, projectionId: Int64, templateId: Int64? = nil, name: String, amount: Int64,
                 isPaid: Bool = false, paidDate: DayDate? = nil, sortOrder: Int = 0, isAdjustment: Bool = false) {

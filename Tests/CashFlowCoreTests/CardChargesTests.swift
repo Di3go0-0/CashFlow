@@ -438,3 +438,37 @@ import GRDB
         #expect(points.last!.balances[f.compras.id!] == nil) // se gasta en el mes: no se proyecta
     }
 }
+
+
+@Suite struct AlertAndRecurringTests {
+    @Test func paceAlertsFireOnlyWhenAhead() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov)
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 2_000_000)))
+        try f.db.saveContribution(Contribution(projectionId: p.id!, fundId: f.compras.id!, amount: 300_000, date: f.nov.firstDay), asTemplate: false)
+        // Libre = 1.700.000. Gastar 1.000.000 del libre el día 8 (27 % del mes) dispara la alerta de ritmo y la de cierre.
+        try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 11, day: 8), amount: 1_000_000, currency: .cop, reason: "Big", fundId: nil))
+        // Vaciar el fondo mensual temprano.
+        try f.db.saveExpense(Expense(date: DayDate(year: 2026, month: 11, day: 8), amount: 300_000, currency: .cop, reason: "Market", fundId: f.compras.id))
+        let snap = try f.db.snapshot()
+        let kinds = Set(snap.paceAlerts(month: f.nov, asOf: DayDate(year: 2026, month: 11, day: 8), language: .en).map(\.kind))
+        #expect(kinds.contains(.freeSpending) && kinds.contains(.projectedShort) && kinds.contains(.fundDrained))
+        // Otro mes o fin de mes: nada.
+        #expect(snap.paceAlerts(month: f.dec, asOf: DayDate(year: 2026, month: 11, day: 8)).isEmpty)
+        #expect(snap.paceAlerts(month: f.nov, asOf: DayDate(year: 2026, month: 11, day: 29), language: .es).allSatisfy { $0.kind != .fundDrained })
+    }
+
+    @Test func recurringBillsAreCreatedWithTheNextMonth() throws {
+        let f = try Fixture()
+        let p = try f.db.startMonth(f.nov)
+        try f.db.saveConsumable(Consumable(projectionId: p.id!, name: "Internet", amount: 90_000), asTemplate: false)
+        var rent = Consumable(projectionId: p.id!, name: "Rent", amount: 800_000)
+        rent.isRecurring = true
+        try f.db.saveConsumable(rent, asTemplate: false)
+        try f.db.startMonth(f.dec)
+        let snap = try f.db.snapshot()
+        let dec = snap.consumables(for: f.dec)
+        #expect(dec.map(\.name) == ["Rent"] && dec.first?.isRecurring == true && dec.first?.isPaid == false)
+        #expect(snap.monthSummary(f.dec).consumablesTotal == 800_000)
+    }
+}

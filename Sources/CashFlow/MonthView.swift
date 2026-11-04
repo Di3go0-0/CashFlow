@@ -283,7 +283,12 @@ struct MonthView: View {
                     Button { editingConsumable = c } label: {
                         HStack {
                             VStack(alignment: .leading) {
-                                Text(c.name).strikethrough(c.isPaid, color: .secondary)
+                                HStack(spacing: 4) {
+                                    Text(c.name).strikethrough(c.isPaid, color: .secondary)
+                                    if c.isRecurring {
+                                        Image(systemName: "repeat").font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
                                 if c.isPaid, let d = c.paidDate {
                                     Text(T("Paid on %@", d.shortDisplay)).font(.caption).foregroundStyle(.secondary)
                                 }
@@ -673,6 +678,7 @@ struct ConsumableEditView: View {
                 TextField(T("Concept"), text: $item.name)
                 MoneyField(title: T("Amount"), amount: $item.amount)
                 Toggle(T("Paid"), isOn: $item.isPaid)
+                Toggle(T("Repeats every month"), isOn: $item.isRecurring)
                     .onChange(of: item.isPaid) { _, paid in
                         item.paidDate = paid ? (item.paidDate ?? model.defaultDate) : nil
                     }

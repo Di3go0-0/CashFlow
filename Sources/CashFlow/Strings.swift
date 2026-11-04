@@ -15,6 +15,8 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Repeats every month": "Se repite cada mes",
+        "Heads up": "Ojo",
         "Has a goal": "Tiene meta",
         "Target amount": "Monto meta",
         "By a month": "Para un mes",
@@ -532,6 +534,8 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Repeats every month": "Se répète chaque mois",
+        "Heads up": "Attention",
         "Has a goal": "A un objectif",
         "Target amount": "Montant cible",
         "By a month": "Pour un mois",

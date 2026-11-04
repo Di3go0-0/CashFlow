@@ -29,6 +29,18 @@ public enum L10n {
         String(format: tr(key), arguments: args)
     }
 
+    public static func tr(_ key: String, in lang: AppLanguage) -> String {
+        switch lang {
+        case .en: key
+        case .es: es[key] ?? key
+        case .fr: fr[key] ?? key
+        }
+    }
+
+    public static func tr(_ key: String, in lang: AppLanguage, _ args: CVarArg...) -> String {
+        String(format: tr(key, in: lang), arguments: args)
+    }
+
     static let monthNames: [AppLanguage: [String]] = [
         .en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
         .es: ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
@@ -50,6 +62,14 @@ public enum L10n {
         "Top-up from %@: %@": "Abono desde %@: %@",
         "Card payment": "Pago tarjeta",
         "Card fee": "Cuota de manejo",
+        "Free money is going fast": "El libre se está yendo rápido",
+        "%d%% used with %d%% of the month gone": "%d %% usado con %d %% del mes corrido",
+        "At this pace you end the month short": "A este ritmo terminas el mes en negativo",
+        "About %@ below zero by %@": "Unos %@ por debajo de cero al %@",
+        "%@ ran out": "%@ se acabó",
+        "%d days of the month left": "quedan %d días del mes",
+        "%@: pocket is short": "%@: el bolsillo no alcanza",
+        "Missing %@ for the payment on %@": "Faltan %@ para el pago del %@",
         "Balance reconciliation": "Cuadre de saldo",
         "Month-end reconciliation": "Cuadre de fin de mes",
         "Manual deposit": "Entrada manual",
@@ -69,6 +89,14 @@ public enum L10n {
         "Top-up from %@: %@": "Provision depuis %@ : %@",
         "Card payment": "Paiement carte",
         "Card fee": "Frais de carte",
+        "Free money is going fast": "L'argent libre part vite",
+        "%d%% used with %d%% of the month gone": "%d %% utilisé après %d %% du mois",
+        "At this pace you end the month short": "À ce rythme vous finissez le mois à découvert",
+        "About %@ below zero by %@": "Environ %@ sous zéro au %@",
+        "%@ ran out": "%@ est épuisé",
+        "%d days of the month left": "il reste %d jours dans le mois",
+        "%@: pocket is short": "%@ : la poche ne suffit pas",
+        "Missing %@ for the payment on %@": "Il manque %@ pour le paiement du %@",
         "Balance reconciliation": "Ajustement du solde",
         "Month-end reconciliation": "Ajustement de fin de mois",
         "Manual deposit": "Entrée manuelle",

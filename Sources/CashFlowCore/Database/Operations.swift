@@ -52,6 +52,14 @@ public extension AppDatabase {
                     try cm.insert(db)
                 }
                 try Self.syncCardCharges(db, month: month, projectionId: projection.id!)
+                // Bills marcados como recurrentes en el mes anterior se crean solos.
+                if let prev = try Projection.filter(Column("month") == month.previous).fetchOne(db) {
+                    for c in try Consumable.filter(Column("projectionId") == prev.id! && Column("isRecurring") == true && Column("isAdjustment") == false).order(Column("sortOrder")).fetchAll(db) {
+                        var copy = Consumable(projectionId: projection.id!, templateId: c.templateId, name: c.name, amount: c.amount, sortOrder: c.sortOrder)
+                        copy.isRecurring = true
+                        try copy.insert(db)
+                    }
+                }
                 if fromTemplates {
                     let funds = try Fund.filter(Column("isArchived") == false && Column("cardId") == nil).fetchAll(db)
                     for f in funds where f.defaultContribution > 0 {
@@ -131,6 +139,7 @@ public extension AppDatabase {
                 for c in try Consumable.filter(Column("projectionId") == src.id!).order(Column("sortOrder")).fetchAll(db)
                     where !existing.contains(c.name.lowercased()) {
                     var copy = Consumable(projectionId: dst.id!, templateId: c.templateId, name: c.name, amount: c.amount, sortOrder: c.sortOrder)
+                    copy.isRecurring = c.isRecurring
                     try copy.insert(db)
                 }
             case .debts, .necessary:
