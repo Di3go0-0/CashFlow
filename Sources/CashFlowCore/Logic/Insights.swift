@@ -30,8 +30,8 @@ public extension Snapshot {
                 dict[key] = ConceptTotal(name: trimmed.prefix(1).uppercased() + trimmed.dropFirst(), total: amount, count: 1)
             }
         }
-        for e in expenses where e.month == month { add(e.reason, e.amountCOP) }
-        for e in cardExpenses where e.month == month { add(e.reason, netAmount(of: e)) }
+        for e in expenses where e.month == month { add(e.reason, e.amountCOP - lent(of: e)) }
+        for e in cardExpenses where e.month == month { add(e.reason, netAmount(of: e) - lent(of: e)) }
         return dict.values.sorted { $0.total == $1.total ? $0.name < $1.name : $0.total > $1.total }
     }
 
@@ -64,19 +64,20 @@ public enum CSVExport {
             let needsQuotes = s.contains(",") || s.contains("\"") || s.contains("\n")
             return needsQuotes ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
         }
-        var lines = ["date,type,card,reason,amount_cop,currency,amount,rate,source,paid,refunded_cop"]
+        var lines = ["date,type,card,reason,amount_cop,currency,amount,rate,source,paid,refunded_cop,lent_cop,lent_to"]
         var rows: [(DayDate, [String])] = []
         for e in snapshot.expenses where e.month == month {
             rows.append((e.date, [e.date.key, "transfer", "", e.reason, String(e.amountCOP), e.currency.rawValue,
                                   MoneyFormat.plain(minor: e.amount, currency: e.currency), e.rate.map { String(format: "%.2f", $0) } ?? "",
-                                  snapshot.expenseSourceName(e), "yes", "0"]))
+                                  snapshot.expenseSourceName(e), "yes", "0", String(snapshot.lent(of: e)), snapshot.loan(forExpense: e.id)?.name ?? ""]))
         }
         let allocs = Dictionary(grouping: snapshot.allocations, by: \.cardExpenseId)
         for e in snapshot.cardExpenses where e.month == month {
             let sources = (allocs[e.id!] ?? []).map { "\(snapshot.allocationSourceName($0)) \($0.amount)" }.joined(separator: " | ")
             rows.append((e.date, [e.date.key, "card", snapshot.card(e.cardId)?.name ?? "", e.reason, String(e.amountCOP), e.currency.rawValue,
                                   MoneyFormat.plain(minor: e.amount, currency: e.currency), e.rate.map { String(format: "%.2f", $0) } ?? "",
-                                  sources, e.isPaid ? "yes" : "no", String(e.amountCOP - snapshot.netAmount(of: e))]))
+                                  sources, e.isPaid ? "yes" : "no", String(e.amountCOP - snapshot.netAmount(of: e)),
+                                  String(snapshot.lent(of: e)), snapshot.loan(forCardExpense: e.id)?.name ?? ""]))
         }
         for (_, cols) in rows.sorted(by: { $0.0 < $1.0 }) {
             lines.append(cols.map(cell).joined(separator: ","))

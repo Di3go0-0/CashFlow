@@ -234,6 +234,9 @@ struct ExpenseRow: View {
                 if let bm = expense.budgetMonth, bm != expense.date.yearMonth {
                     Label(T("Counts for %@", bm.displayName), systemImage: "calendar.badge.clock").font(.caption2).foregroundStyle(Theme.accent)
                 }
+                if let l = model.snapshot.loan(forExpense: expense.id) {
+                    LoanBadge(status: model.snapshot.status(of: l)).font(.caption2)
+                }
             }
             Spacer()
             VStack(alignment: .trailing) {
@@ -278,7 +281,14 @@ struct ExpenseEditView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var expense: Expense
     @State private var source: MoneySource = .extra
+    @State private var loanOn = false
+    @State private var loanAmount: Int64 = 0
+    @State private var loanName = ""
     private let isNew: Bool
+
+    private var existingLoan: LoanStatus? {
+        model.snapshot.loan(forExpense: expense.id).map { model.snapshot.status(of: $0) }
+    }
 
     init(expense: Expense?, prefill: ExpensePrefill? = nil) {
         isNew = expense == nil
@@ -321,6 +331,9 @@ struct ExpenseEditView: View {
                     FundShortfallWarning(source: source, amount: expense.amountCOP)
                     SourceBalanceRow(source: source)
                 }
+                if expense.commitmentId == nil && !expense.fromConsumables {
+                    LoanEditorSection(isOn: $loanOn, amount: $loanAmount, name: $loanName, cap: expense.amountCOP, existing: existingLoan)
+                }
             }
             .auroraList()
             .keyboardDismissal()
@@ -332,15 +345,26 @@ struct ExpenseEditView: View {
                     expense.budgetMonth = model.defaultBudgetMonth
                 }
                 source = MoneySource(fundId: expense.fundId, fromConsumables: expense.fromConsumables, consumableId: expense.consumableId, commitmentId: expense.commitmentId)
+                if let l = existingLoan {
+                    loanOn = true
+                    loanAmount = l.loan.amount
+                    loanName = l.loan.name
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(T("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(T("Save")) {
                         let e = expense
-                        if model.perform({ try model.db.saveExpense(e) }) { dismiss() }
+                        let (on, lAmount, lName) = (loanOn, loanAmount, loanName)
+                        let ok = model.perform {
+                            let saved = try model.db.saveExpense(e)
+                            try model.db.syncLoan(expenseId: saved.id, amount: on ? lAmount : 0, name: lName, date: saved.date)
+                        }
+                        if ok { dismiss() }
                     }
-                    .disabled(expense.amount <= 0 || (expense.currency == .usd && (expense.rate ?? 0) <= 0))
+                    .disabled(expense.amount <= 0 || (expense.currency == .usd && (expense.rate ?? 0) <= 0)
+                              || (loanOn && (loanAmount <= 0 || loanAmount > expense.amountCOP || loanName.trimmingCharacters(in: .whitespaces).isEmpty)))
                 }
             }
         }

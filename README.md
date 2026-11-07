@@ -24,7 +24,7 @@ La idea es simple: el ingreso del mes se reparte en **fondos** (bolsillos con pr
 
 - **Resumen** del mes: libre para gastar, cuánto por día, a dónde va el ingreso, últimos seis meses, fondos y tarjetas. Botón del ojo para ocultar montos y ver solo porcentajes.
 - **Mes**: ingresos (con descuentos y bonos), aportes a fondos, consumibles, deudas y gastos necesarios. Cada categoría se trae del mes anterior con un botón. Un mes se puede **terminar** desde dos días antes de que acabe; la app pasa al siguiente como mes en curso.
-- **Fondos**: saldo calculado desde movimientos, flujo por contraparte, traslados entre fondos, saldo real con un toque.
+- **Fondos**: saldo calculado desde movimientos, flujo por contraparte, traslados entre fondos, saldo real con un toque. **Préstamos**: parte de un gasto (o un préstamo suelto) que no cuenta como gastado hasta que vuelve; los pagos entran a un fondo o al saldo libre del mes.
 - **Tarjetas de crédito**: ciclos por fecha de corte y de pago, bolsillo de pago por tarjeta, abonos desde fondos o del saldo libre, pagos con comparación "tenía vs. pagué", cuota de manejo y cuotas de compras a crédito generadas solas en cada corte, cupo que descuenta las cuotas por facturar.
 - **Gastos**: con y sin tarjeta, en pesos o dólares con TRM, búsqueda, totales por concepto, exportación CSV. Un gasto de fin de mes puede contar para el mes siguiente.
 - Interfaz en inglés con español y francés. Diseño iOS 26 (Liquid Glass) con cinco acentos pastel. Bloqueo opcional con Face ID. Recordatorios de corte y pago. Acciones rápidas desde el ícono y enlace `cashflow://add` para registrar gastos desde Atajos.

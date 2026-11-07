@@ -90,7 +90,8 @@ struct SummaryView: View {
                 }
             }
 
-            if s.pendingIncome > 0 || s.commitmentsUnpaid > 0 || s.consumablesTotal > 0 {
+            let owed = model.snapshot.outstandingLoans
+            if s.pendingIncome > 0 || s.commitmentsUnpaid > 0 || s.consumablesTotal > 0 || owed > 0 {
                 Section(T("Still to settle")) {
                     if s.pendingIncome > 0 {
                         MoneyRow(title: T("Income still to come"), amount: s.pendingIncome, color: .secondary, percentOf: s.income + s.pendingIncome)
@@ -105,11 +106,41 @@ struct SummaryView: View {
                                  subtitle: T("Pool %@ · left in it %@", MoneyFormat.cop(s.consumablesTotal), MoneyFormat.cop(s.consumablesPending)),
                                  percentOf: s.income)
                     }
+                    if owed > 0 {
+                        NavigationLink {
+                            List { LoansSection() }.auroraList().navigationTitle(T("Lent out")).navigationBarTitleDisplayMode(.inline)
+                        } label: {
+                            MoneyRow(title: T("Lent out, waiting to come back"), amount: owed, color: .secondary,
+                                     subtitle: model.snapshot.loanPeople().filter { $0.outstanding > 0 }.map(\.name).joined(separator: ", "),
+                                     percentOf: s.income)
+                        }
+                    }
+                }
+            }
+
+            let repaid = model.snapshot.loanRepayments(in: model.month)
+            if !repaid.isEmpty {
+                Section {
+                    ForEach(repaid.sorted { $0.date > $1.date }) { r in
+                        let name = model.snapshot.loans.first { $0.id == r.loanId }?.name ?? ""
+                        MoneyRow(title: name, amount: r.amount, showSign: true, color: .green,
+                                 subtitle: "\(r.date.shortDisplay) · " + (r.fundId.flatMap { model.snapshot.fund($0)?.name } ?? T("Free to spend")),
+                                 percentOf: s.income)
+                    }
+                } header: {
+                    Text(T("Repaid this month"))
+                } footer: {
+                    Text(T("Loans that came back this month and where the money went."))
                 }
             }
 
             Section(T("Free to spend")) {
-                MoneyRow(title: T("Free to spend"), amount: s.extraBalance, subtitle: T("Income minus funds, bills, debts and necessary"), percentOf: s.income)
+                if s.loansRepaid > 0 {
+                    MoneyRow(title: T("Loans repaid into it"), amount: s.loansRepaid, showSign: true, color: .green, percentOf: s.income)
+                }
+                MoneyRow(title: T("Free to spend"), amount: s.extraBalance,
+                         subtitle: s.loansRepaid > 0 ? T("Income plus loans repaid, minus funds, bills, debts and necessary") : T("Income minus funds, bills, debts and necessary"),
+                         percentOf: s.income)
                 MoneyRow(title: T("Already spent from it"), amount: s.spentFromExtra, percentOf: s.income)
                 MoneyRow(title: T("Remaining"), amount: s.remaining, emphasis: true, color: s.remaining < 0 ? .red : .primary, percentOf: s.income)
                 if let projected = model.projectedRemaining {

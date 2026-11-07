@@ -498,7 +498,8 @@ public extension AppDatabase {
     // MARK: Gastos sin tarjeta
 
     /// Guarda un gasto. Si paga un ítem de consumible, lo marca pagado en la fecha del gasto.
-    func saveExpense(_ expense: Expense) throws {
+    @discardableResult
+    func saveExpense(_ expense: Expense) throws -> Expense {
         try write { db in
             var e = expense
             e.recomputeCOP()
@@ -516,6 +517,7 @@ public extension AppDatabase {
                 c.paidDate = e.date
                 try c.update(db)
             }
+            return e
         }
     }
 
@@ -739,6 +741,84 @@ public extension AppDatabase {
         let left = snap.netAmount(of: e)
         guard left > 0 else { return }
         try addRefund(CardRefund(cardExpenseId: id, date: date, amount: left, note: note))
+    }
+
+    // MARK: Préstamos
+
+    enum LoanError: Error { case amountTooLarge, noExpense, hasRepayments, repaymentTooLarge, notFound }
+
+    /// Crea o actualiza el préstamo ligado a un gasto. El monto no puede superar el gasto (neto en tarjeta).
+    func saveLoan(_ loan: Loan) throws {
+        let snap = try snapshot()
+        let cap: Int64
+        if let eid = loan.expenseId, let e = snap.expenses.first(where: { $0.id == eid }) {
+            cap = e.amountCOP
+        } else if let cid = loan.cardExpenseId, let e = snap.cardExpenses.first(where: { $0.id == cid }) {
+            cap = snap.netAmount(of: e)
+        } else {
+            throw LoanError.noExpense
+        }
+        guard loan.amount > 0, loan.amount <= cap else { throw LoanError.amountTooLarge }
+        if let id = loan.id, snap.loanRepayments.filter({ $0.loanId == id }).reduce(0, { $0 + $1.amount }) > loan.amount {
+            throw LoanError.repaymentTooLarge
+        }
+        try write { db in
+            var l = loan
+            l.name = l.name.trimmingCharacters(in: .whitespaces)
+            try l.save(db)
+        }
+    }
+
+    /// Deja el préstamo de un gasto como diga el editor: lo crea, lo actualiza o lo quita (`amount` 0).
+    func syncLoan(expenseId: Int64? = nil, cardExpenseId: Int64? = nil, amount: Int64, name: String, date: DayDate) throws {
+        let snap = try snapshot()
+        let existing = expenseId != nil ? snap.loan(forExpense: expenseId) : snap.loan(forCardExpense: cardExpenseId)
+        if amount <= 0 {
+            if let id = existing?.id { try deleteLoan(id: id) }
+            return
+        }
+        var loan = existing ?? Loan(name: name, date: date, amount: amount, expenseId: expenseId, cardExpenseId: cardExpenseId)
+        loan.name = name
+        loan.amount = amount
+        loan.date = date
+        try saveLoan(loan)
+    }
+
+    /// Borra un préstamo. Si ya tiene pagos, no: primero se borran los pagos.
+    func deleteLoan(id: Int64) throws {
+        let snap = try snapshot()
+        guard let l = snap.loans.first(where: { $0.id == id }) else { return }
+        guard snap.status(of: l).repayments.isEmpty else { throw LoanError.hasRepayments }
+        try write { db in _ = try Loan.deleteOne(db, id: id) }
+    }
+
+    /// Registra un pago del préstamo. No puede superar lo pendiente.
+    func addLoanRepayment(_ repayment: LoanRepayment) throws {
+        let snap = try snapshot()
+        guard let l = snap.loans.first(where: { $0.id == repayment.loanId }) else { throw LoanError.notFound }
+        let outstanding = snap.status(of: l).outstanding
+        guard repayment.amount > 0, repayment.amount <= outstanding else { throw LoanError.repaymentTooLarge }
+        try write { db in var r = repayment; try r.save(db) }
+    }
+
+    func deleteLoanRepayments(ids: [Int64]) throws {
+        try write { db in _ = try LoanRepayment.deleteAll(db, ids: ids) }
+    }
+
+    /// Préstamo suelto: crea el gasto (todo él préstamo) desde un fondo, bolsillo o el saldo libre, y el préstamo ligado.
+    @discardableResult
+    func createStandaloneLoan(name: String, amount: Int64, date: DayDate, fundId: Int64?, budgetMonth: YearMonth? = nil, note: String = "") throws -> Loan {
+        guard amount > 0 else { throw LoanError.amountTooLarge }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return try write { db in
+            var e = Expense(date: date, amount: amount, currency: .cop, reason: L10n.tr("Loan to %@", trimmed), fundId: fundId, note: note)
+            e.budgetMonth = budgetMonth
+            e.recomputeCOP()
+            try e.insert(db)
+            var l = Loan(name: trimmed, date: date, amount: amount, expenseId: e.id, note: note)
+            try l.insert(db)
+            return l
+        }
     }
 
     enum SurplusError: Error { case nothingToReuse, differentCard, amountTooLarge }

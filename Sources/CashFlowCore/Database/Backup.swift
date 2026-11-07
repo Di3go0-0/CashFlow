@@ -25,6 +25,11 @@ public struct Backup: Codable, Sendable {
     public var cardExpenses: [CardExpense]
     public var allocations: [CardAllocation]
     public var payments: [CardPayment]
+    public var refunds: [CardRefund] = []
+    public var scenarios: [Scenario] = []
+    public var scenarioLines: [ScenarioLine] = []
+    public var loans: [Loan] = []
+    public var loanRepayments: [LoanRepayment] = []
     public var settings: [Setting]
 }
 
@@ -53,6 +58,11 @@ public extension AppDatabase {
                 cardExpenses: try CardExpense.fetchAll(db),
                 allocations: try CardAllocation.fetchAll(db),
                 payments: try CardPayment.fetchAll(db),
+                refunds: try CardRefund.fetchAll(db),
+                scenarios: try Scenario.fetchAll(db),
+                scenarioLines: try ScenarioLine.fetchAll(db),
+                loans: try Loan.fetchAll(db),
+                loanRepayments: try LoanRepayment.fetchAll(db),
                 settings: try Setting.fetchAll(db)
             )
         }
@@ -65,6 +75,10 @@ public extension AppDatabase {
     func importBackup(_ data: Data) throws {
         let b = try JSONDecoder().decode(Backup.self, from: data)
         try write { db in
+            try LoanRepayment.deleteAll(db)
+            try Loan.deleteAll(db)
+            try CardRefund.deleteAll(db)
+            try ScenarioLine.deleteAll(db)
             try Consumable.deleteAll(db)
             try ConsumableTemplate.deleteAll(db)
             try SourceDeduction.deleteAll(db)
@@ -85,12 +99,14 @@ public extension AppDatabase {
             try IncomeDeduction.deleteAll(db)
             try Income.deleteAll(db)
             try IncomeSource.deleteAll(db)
+            try Scenario.deleteAll(db)
             try Setting.deleteAll(db)
 
             for var r in b.sources { try r.insert(db) }
             for var r in b.sourceDeductions { try r.insert(db) }
             for var r in b.sourceBonuses { try r.insert(db) }
             for var r in b.consumableTemplates { try r.insert(db) }
+            for var r in b.scenarios { try r.insert(db) }
             for var r in b.incomes { try r.insert(db) }
             for var r in b.deductions { try r.insert(db) }
             for var r in b.bonuses { try r.insert(db) }
@@ -107,6 +123,10 @@ public extension AppDatabase {
             for var r in b.cardExpenses { try r.insert(db) }
             for var r in b.allocations { try r.insert(db) }
             for var r in b.payments { try r.insert(db) }
+            for var r in b.refunds { try r.insert(db) }
+            for var r in b.scenarioLines { try r.insert(db) }
+            for var r in b.loans { try r.insert(db) }
+            for var r in b.loanRepayments { try r.insert(db) }
             for r in b.settings { try r.insert(db) }
         }
     }

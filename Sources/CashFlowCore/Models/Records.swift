@@ -734,6 +734,65 @@ public struct CardRefund: Codable, Identifiable, Hashable, Sendable, FetchableRe
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 
+/// Plata prestada a alguien que debe volver. Nace de un gasto (parte o todo de él), con o sin tarjeta:
+/// la plata sale del origen del gasto como siempre, pero la parte prestada no cuenta como gastado.
+public struct Loan: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "loan"
+
+    public var id: Int64?
+    /// Persona o indicativo. Se reutiliza para agrupar préstamos.
+    public var name: String
+    public var date: DayDate
+    /// Siempre en pesos. Parte del gasto que es préstamo.
+    public var amount: Int64
+    public var expenseId: Int64?
+    public var cardExpenseId: Int64?
+    public var note: String
+
+    public init(id: Int64? = nil, name: String, date: DayDate, amount: Int64, expenseId: Int64? = nil, cardExpenseId: Int64? = nil, note: String = "") {
+        self.id = id
+        self.name = name
+        self.date = date
+        self.amount = amount
+        self.expenseId = expenseId
+        self.cardExpenseId = cardExpenseId
+        self.note = note
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
+/// Pago (total o parcial) de un préstamo. Entra a un fondo o bolsillo (`fundId`) o al saldo libre del mes (`fundId` nil).
+public struct LoanRepayment: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "loanRepayment"
+
+    public var id: Int64?
+    public var loanId: Int64
+    public var date: DayDate
+    /// Siempre en pesos.
+    public var amount: Int64
+    /// Fondo o bolsillo al que entra. Nil: suma al saldo libre del mes.
+    public var fundId: Int64?
+    /// Mes al que cuenta cuando entra al libre, si no es el de la fecha.
+    public var budgetMonth: YearMonth?
+    public var note: String
+
+    public init(id: Int64? = nil, loanId: Int64, date: DayDate, amount: Int64, fundId: Int64? = nil, budgetMonth: YearMonth? = nil, note: String = "") {
+        self.id = id
+        self.loanId = loanId
+        self.date = date
+        self.amount = amount
+        self.fundId = fundId
+        self.budgetMonth = budgetMonth
+        self.note = note
+    }
+
+    /// Mes al que cuenta el pago cuando entra al saldo libre.
+    public var month: YearMonth { budgetMonth ?? date.yearMonth }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
+}
+
 public struct CardPayment: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "cardPayment"
 

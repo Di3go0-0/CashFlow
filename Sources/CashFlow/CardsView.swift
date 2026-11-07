@@ -337,6 +337,9 @@ struct CardExpenseRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                if let l = model.snapshot.loan(forCardExpense: e.id) {
+                    LoanBadge(status: model.snapshot.status(of: l)).font(.caption2)
+                }
                 if showAllocations, !status.allocations.isEmpty {
                     Text(status.allocations.map { "\(model.snapshot.allocationSourceName($0)) \(MoneyFormat.cop($0.amount))" }.joined(separator: " · "))
                         .font(.caption2)
@@ -371,6 +374,13 @@ struct CardExpenseEditView: View {
 
     @State private var addingRefund = false
     @State private var reusing = false
+    @State private var loanOn = false
+    @State private var loanAmount: Int64 = 0
+    @State private var loanName = ""
+
+    private var existingLoan: LoanStatus? {
+        model.snapshot.loan(forCardExpense: expense.id).map { model.snapshot.status(of: $0) }
+    }
 
     private var allocations: [CardAllocation] {
         guard let id = expense.id else { return [] }
@@ -429,6 +439,10 @@ struct CardExpenseEditView: View {
                         let c = card.cycle(containing: expense.date)
                         Text(T("Cycle %@, due on %@.", c.displayRange, c.paymentDue.shortDisplay))
                     }
+                }
+
+                if !expense.isGenerated {
+                    LoanEditorSection(isOn: $loanOn, amount: $loanAmount, name: $loanName, cap: netAmount, existing: existingLoan)
                 }
 
                 if !isNew {
@@ -531,12 +545,18 @@ struct CardExpenseEditView: View {
                     expense.budgetMonth = model.defaultBudgetMonth
                     if expense.cardId == 0, let c = model.activeCards.first { expense.cardId = c.id! }
                 }
+                if let l = existingLoan {
+                    loanOn = true
+                    loanAmount = l.loan.amount
+                    loanName = l.loan.name
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(isNew ? T("Cancel") : T("Close")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(T("Save")) { save() }
-                        .disabled(expense.amount <= 0 || expense.cardId == 0 || (expense.currency == .usd && (expense.rate ?? 0) <= 0))
+                        .disabled(expense.amount <= 0 || expense.cardId == 0 || (expense.currency == .usd && (expense.rate ?? 0) <= 0)
+                                  || (loanOn && (loanAmount <= 0 || loanAmount > netAmount || loanName.trimmingCharacters(in: .whitespaces).isEmpty)))
                 }
             }
             .sheet(item: $newAllocation) { AllocationEditView(allocation: $0) }
@@ -557,6 +577,8 @@ struct CardExpenseEditView: View {
         var saved = e
         let ok = model.write { db in try saved.save(db) }
         guard ok else { return }
+        let (on, lAmount, lName) = (loanOn, loanAmount, loanName)
+        guard model.perform({ try model.db.syncLoan(cardExpenseId: saved.id, amount: on ? lAmount : 0, name: lName, date: saved.date) }) else { return }
         if isNew {
             expense = saved
             isNew = false

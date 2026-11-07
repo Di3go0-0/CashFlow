@@ -472,3 +472,97 @@ import GRDB
         #expect(snap.monthSummary(f.dec).consumablesTotal == 800_000)
     }
 }
+
+@Suite struct LoanTests {
+    /// Gasto de 375.000 del libre, 175.000 prestados: gastado 200.000, el restante baja los 375.000.
+    @Test func partOfAnExpenseCanBeALoan() throws {
+        let f = try Fixture()
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 3_000_000), deductions: [], bonuses: []))
+        try f.db.startMonth(f.nov)
+        let before = try f.db.snapshot().monthSummary(f.nov)
+        var e = Expense(date: DayDate(year: 2026, month: 11, day: 5), amount: 375_000, currency: .cop, reason: "Dinner", fundId: nil)
+        e.recomputeCOP()
+        try f.db.saveExpense(e)
+        let saved = try f.db.snapshot().expenses.first { $0.reason == "Dinner" }!
+        try f.db.saveLoan(Loan(name: "Ana", date: saved.date, amount: 175_000, expenseId: saved.id))
+
+        let snap = try f.db.snapshot()
+        let s = snap.monthSummary(f.nov)
+        #expect(s.spent == before.spent + 200_000)
+        #expect(s.lent == 175_000)
+        #expect(s.remaining == before.remaining - 375_000)
+        #expect(snap.conceptTotals(for: f.nov).first { $0.name == "Dinner" }?.total == Int64(200_000))
+        #expect(snap.outstandingLoans == 175_000)
+        #expect(snap.loanNames() == ["Ana"])
+
+        // Más que el gasto no se puede prestar.
+        #expect(throws: AppDatabase.LoanError.self) {
+            try f.db.saveLoan(Loan(name: "Ana", date: saved.date, amount: 400_000, expenseId: saved.id))
+        }
+    }
+
+    @Test func cardExpenseLoanDoesNotTouchDebt() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        var ce = CardExpense(cardId: f.unica.id!, date: DayDate(year: 2026, month: 11, day: 3), amount: 375_000, currency: .cop, reason: "Market")
+        ce.recomputeCOP()
+        let savedCE: CardExpense = try f.db.write { db in var x = ce; try x.insert(db); return x }
+        try f.db.saveLoan(Loan(name: "Luis", date: savedCE.date, amount: 175_000, cardExpenseId: savedCE.id))
+        let snap = try f.db.snapshot()
+        #expect(snap.monthSummary(f.nov).spent == 200_000)
+        #expect(snap.monthSummary(f.nov).lent == 175_000)
+        #expect(snap.cardStatuses(asOf: DayDate(year: 2026, month: 11, day: 4)).first { $0.card.id == f.unica.id }?.debt == Int64(375_000))
+    }
+
+    @Test func repaymentsGoToFreeBalanceOrToAFund() throws {
+        let f = try Fixture()
+        try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 3_000_000), deductions: [], bonuses: []))
+        try f.db.startMonth(f.nov)
+        let loan = try f.db.createStandaloneLoan(name: "Ana", amount: 175_000, date: DayDate(year: 2026, month: 11, day: 2), fundId: nil)
+        var snap = try f.db.snapshot()
+        let base = snap.monthSummary(f.nov)
+        #expect(snap.expenses.contains { $0.reason == L10n.tr("Loan to %@", "Ana") && $0.amountCOP == 175_000 })
+        #expect(base.lent == 175_000)
+
+        // Pago parcial al libre de noviembre.
+        try f.db.addLoanRepayment(LoanRepayment(loanId: loan.id!, date: DayDate(year: 2026, month: 11, day: 20), amount: 100_000))
+        snap = try f.db.snapshot()
+        let s1 = snap.monthSummary(f.nov)
+        #expect(s1.loansRepaid == 100_000)
+        #expect(s1.extraBalance == base.extraBalance + 100_000)
+        #expect(s1.remaining == base.remaining + 100_000)
+        let st = snap.status(of: snap.loans[0])
+        #expect(st.outstanding == 75_000)
+        #expect(!st.isRepaid)
+
+        // El resto a un fondo: el mes no cambia, el fondo sube.
+        let motoBefore = snap.balance(of: f.moto.id!, asOf: DayDate(year: 2026, month: 12, day: 31))
+        try f.db.addLoanRepayment(LoanRepayment(loanId: loan.id!, date: DayDate(year: 2026, month: 11, day: 25), amount: 75_000, fundId: f.moto.id))
+        snap = try f.db.snapshot()
+        #expect(snap.monthSummary(f.nov).loansRepaid == 100_000)
+        #expect(snap.balance(of: f.moto.id!, asOf: DayDate(year: 2026, month: 12, day: 31)) == motoBefore + 75_000)
+        #expect(snap.status(of: snap.loans[0]).isRepaid)
+        #expect(snap.outstandingLoans == 0)
+        #expect(snap.loanRepayments(in: f.nov).count == 2)
+        #expect(snap.movements(of: f.moto.id!).contains { $0.kind == .loanRepayment && $0.counterparty == "Ana" })
+
+        // No se puede pagar de más ni borrar un préstamo con pagos.
+        #expect(throws: AppDatabase.LoanError.self) {
+            try f.db.addLoanRepayment(LoanRepayment(loanId: loan.id!, date: DayDate(year: 2026, month: 11, day: 26), amount: 1))
+        }
+        #expect(throws: AppDatabase.LoanError.self) { try f.db.deleteLoan(id: loan.id!) }
+    }
+
+    @Test func deletingTheExpenseDeletesLoanAndRepayments() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let loan = try f.db.createStandaloneLoan(name: "Ana", amount: 50_000, date: DayDate(year: 2026, month: 11, day: 2), fundId: f.compras.id)
+        try f.db.addLoanRepayment(LoanRepayment(loanId: loan.id!, date: DayDate(year: 2026, month: 11, day: 3), amount: 20_000, fundId: f.compras.id))
+        let eid = loan.expenseId!
+        #expect(try f.db.snapshot().balance(of: f.compras.id!, asOf: DayDate(year: 2026, month: 11, day: 30)) == -30_000)
+        try f.db.deleteExpenses(ids: [eid])
+        let snap = try f.db.snapshot()
+        #expect(snap.loans.isEmpty)
+        #expect(snap.loanRepayments.isEmpty)
+    }
+}

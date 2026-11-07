@@ -26,6 +26,8 @@ public struct Snapshot: Sendable {
     public var scenarios: [Scenario] = []
     public var scenarioLines: [ScenarioLine] = []
     public var scenarioIncomes: [IncomeDetail] = []
+    public var loans: [Loan] = []
+    public var loanRepayments: [LoanRepayment] = []
 
     public init() {}
 
@@ -57,6 +59,8 @@ public struct Snapshot: Sendable {
         s.refunds = try CardRefund.order(Column("date"), Column("id")).fetchAll(db)
         s.scenarios = try Scenario.order(Column("createdAt").desc, Column("id").desc).fetchAll(db)
         s.scenarioLines = try ScenarioLine.fetchAll(db)
+        s.loans = try Loan.order(Column("date").desc, Column("id").desc).fetchAll(db)
+        s.loanRepayments = try LoanRepayment.order(Column("date"), Column("id")).fetchAll(db)
         return s
     }
 
@@ -132,7 +136,7 @@ public struct FundReport: Hashable, Sendable, Identifiable {
 }
 
 public enum FundMovementKind: String, Sendable {
-    case contribution, expense, allocationOut, allocationIn, cardPayment, adjustment
+    case contribution, expense, allocationOut, allocationIn, cardPayment, adjustment, loanRepayment
 }
 
 public struct FundMovement: Hashable, Sendable, Identifiable {
@@ -188,6 +192,10 @@ public extension Snapshot {
             for p in payments where p.cardId == cardId {
                 out.append(.init(id: "p\(p.id!)", date: p.date, kind: .cardPayment, title: L10n.tr("Card payment"), amount: -p.amount, sourceId: p.id!, counterparty: card(cardId)?.name))
             }
+        }
+        for r in loanRepayments where r.fundId == fundId {
+            let name = loans.first { $0.id == r.loanId }?.name ?? ""
+            out.append(.init(id: "lr\(r.id!)", date: r.date, kind: .loanRepayment, title: L10n.tr("Loan repaid: %@", name), amount: r.amount, sourceId: r.id!, counterparty: name))
         }
         for a in adjustments where a.fundId == fundId {
             let title = a.reason.isEmpty ? L10n.tr(a.amount >= 0 ? "Manual deposit" : "Manual withdrawal") : a.reason
@@ -269,12 +277,16 @@ public struct MonthSummary: Hashable, Sendable {
     public var commitmentsUnpaid: Int64
     /// Gastos y abonos que salieron del saldo extra.
     public var spentFromExtra: Int64
+    /// Parte de los gastos del mes que fue préstamo a alguien: salió, pero no es gastado.
+    public var lent: Int64 = 0
+    /// Pagos de préstamos que entraron al saldo libre de este mes.
+    public var loansRepaid: Int64 = 0
 
     /// Lo que queda del apartado de consumibles.
     public var consumablesPending: Int64 { consumablesTotal - consumablesSpent }
     public var committed: Int64 { contributions + debts + necessary + consumablesTotal + adjustments }
-    /// Lo que queda del ingreso después de repartirlo.
-    public var extraBalance: Int64 { income - committed }
+    /// Lo que queda del ingreso después de repartirlo, más los préstamos que volvieron al libre.
+    public var extraBalance: Int64 { income + loansRepaid - committed }
     /// Saldo extra menos lo que ya se gastó de él.
     public var remaining: Int64 { extraBalance - spentFromExtra }
 }
@@ -310,7 +322,9 @@ public extension Snapshot {
             + monthAllocs.filter(\.fromConsumables).reduce(0) { $0 + $1.amount }
             + consPaidDirect
 
-        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + netAmount(of: $1) } + consPaidDirect
+        let lent = ex.reduce(0) { $0 + lent(of: $1) } + cex.reduce(0) { $0 + lent(of: $1) }
+        let spent = ex.reduce(0) { $0 + $1.amountCOP } + cex.reduce(0) { $0 + netAmount(of: $1) } + consPaidDirect - lent
+        let repaidToFree = loanRepayments.filter { $0.fundId == nil && $0.month == month }.reduce(0) { $0 + $1.amount }
         let commitmentsUnpaid = cms.filter { $0.kind != .adjustment }.reduce(0) { $0 + max(0, $1.amount - paid(toward: $1.id!)) }
 
         let fromExtra = ex.filter(\.isFromExtra).reduce(0) { $0 + $1.amountCOP }
@@ -319,7 +333,90 @@ public extension Snapshot {
         return MonthSummary(month: month, income: income, pendingIncome: pending, contributions: contributed,
                             debts: debts, necessary: necessary, adjustments: adjustments, consumablesTotal: consTotal, consumablesPaid: consPaid,
                             consumablesSpent: consSpent, consumablesUnpaid: consUnpaid,
-                            saved: saved, spent: spent, commitmentsUnpaid: commitmentsUnpaid, spentFromExtra: fromExtra)
+                            saved: saved, spent: spent, commitmentsUnpaid: commitmentsUnpaid, spentFromExtra: fromExtra,
+                            lent: lent, loansRepaid: repaidToFree)
+    }
+}
+
+// MARK: - Préstamos
+
+/// Un préstamo con sus pagos.
+public struct LoanStatus: Hashable, Sendable, Identifiable {
+    public var loan: Loan
+    public var repayments: [LoanRepayment]
+
+    public init(loan: Loan, repayments: [LoanRepayment]) {
+        self.loan = loan
+        self.repayments = repayments
+    }
+
+    public var id: Int64? { loan.id }
+    public var repaid: Int64 { repayments.reduce(0) { $0 + $1.amount } }
+    public var outstanding: Int64 { max(0, loan.amount - repaid) }
+    public var isRepaid: Bool { loan.amount > 0 && repaid >= loan.amount }
+}
+
+/// Lo que una persona debe en total.
+public struct LoanPerson: Hashable, Sendable, Identifiable {
+    public var name: String
+    public var loans: [LoanStatus]
+    public var id: String { name.lowercased() }
+    public var outstanding: Int64 { loans.reduce(0) { $0 + $1.outstanding } }
+    public var lent: Int64 { loans.reduce(0) { $0 + $1.loan.amount } }
+    public var open: Int { loans.filter { !$0.isRepaid }.count }
+}
+
+public extension Snapshot {
+    func status(of loan: Loan) -> LoanStatus {
+        LoanStatus(loan: loan, repayments: loanRepayments.filter { $0.loanId == loan.id })
+    }
+
+    /// Todos los préstamos, del más reciente al más antiguo.
+    func loanStatuses() -> [LoanStatus] {
+        let byLoan = Dictionary(grouping: loanRepayments, by: \.loanId)
+        return loans.map { LoanStatus(loan: $0, repayments: byLoan[$0.id!] ?? []) }
+    }
+
+    /// Préstamos agrupados por persona, primero quien más debe.
+    func loanPeople() -> [LoanPerson] {
+        let groups = Dictionary(grouping: loanStatuses()) { $0.loan.name.trimmingCharacters(in: .whitespaces).lowercased() }
+        return groups.values.map { LoanPerson(name: $0[0].loan.name.trimmingCharacters(in: .whitespaces), loans: $0) }
+            .sorted { $0.outstanding == $1.outstanding ? $0.name < $1.name : $0.outstanding > $1.outstanding }
+    }
+
+    /// Nombres ya usados, el más reciente primero, para autocompletar.
+    func loanNames() -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for l in loans {
+            let name = l.name.trimmingCharacters(in: .whitespaces)
+            let key = name.lowercased()
+            if !key.isEmpty, seen.insert(key).inserted { out.append(name) }
+        }
+        return out
+    }
+
+    /// Total prestado que aún no vuelve.
+    var outstandingLoans: Int64 { loanStatuses().reduce(0) { $0 + $1.outstanding } }
+
+    func loan(forExpense id: Int64?) -> Loan? { id.flatMap { i in loans.first { $0.expenseId == i } } }
+    func loan(forCardExpense id: Int64?) -> Loan? { id.flatMap { i in loans.first { $0.cardExpenseId == i } } }
+
+    /// Parte prestada de un gasto sin tarjeta, nunca mayor que el gasto.
+    func lent(of expense: Expense) -> Int64 {
+        guard let l = loan(forExpense: expense.id) else { return 0 }
+        return min(l.amount, expense.amountCOP)
+    }
+
+    /// Parte prestada de un gasto de tarjeta, nunca mayor que el neto.
+    func lent(of expense: CardExpense) -> Int64 {
+        guard let l = loan(forCardExpense: expense.id) else { return 0 }
+        return min(l.amount, netAmount(of: expense))
+    }
+
+    /// Pagos de préstamos recibidos en un mes (al libre por `month`, a fondos por fecha).
+    func loanRepayments(in month: YearMonth) -> [LoanRepayment] {
+        loanRepayments.filter { $0.fundId == nil ? $0.month == month : month.contains($0.date) }
     }
 }
 

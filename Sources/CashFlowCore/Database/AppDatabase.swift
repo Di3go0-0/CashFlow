@@ -354,6 +354,26 @@ public final class AppDatabase: Sendable {
         m.registerMigration("v16") { db in
             try db.alter(table: "consumable") { t in t.add(column: "isRecurring", .boolean).notNull().defaults(to: false) }
         }
+        m.registerMigration("v17") { db in
+            try db.create(table: "loan") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("date", .text).notNull()
+                t.column("amount", .integer).notNull()
+                t.column("expenseId", .integer).indexed().references("expense", onDelete: .cascade)
+                t.column("cardExpenseId", .integer).indexed().references("cardExpense", onDelete: .cascade)
+                t.column("note", .text).notNull().defaults(to: "")
+            }
+            try db.create(table: "loanRepayment") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("loanId", .integer).notNull().indexed().references("loan", onDelete: .cascade)
+                t.column("date", .text).notNull()
+                t.column("amount", .integer).notNull()
+                t.column("fundId", .integer).references("fund", onDelete: .setNull)
+                t.column("budgetMonth", .text)
+                t.column("note", .text).notNull().defaults(to: "")
+            }
+        }
         return m
     }
 }

@@ -393,8 +393,11 @@ struct MonthView: View {
                 MoneyRow(title: T("Bills"), amount: sum.consumables, subtitle: Pct.string(sum.consumables, of: sum.income), percentOf: sum.income)
                 MoneyRow(title: T("Debts"), amount: sum.debts, subtitle: Pct.string(sum.debts, of: sum.income), percentOf: sum.income)
                 MoneyRow(title: T("Necessary"), amount: sum.necessary, subtitle: Pct.string(sum.necessary, of: sum.income), percentOf: sum.income)
-                MoneyRow(title: T("Free to spend"), amount: sum.free, emphasis: true, color: sum.free < 0 ? .red : .primary,
-                         subtitle: Pct.string(sum.free, of: sum.income), percentOf: sum.income)
+                if s.loansRepaid > 0 {
+                    MoneyRow(title: T("Loans repaid"), amount: s.loansRepaid, showSign: true, color: .green, subtitle: Pct.string(s.loansRepaid, of: sum.income), percentOf: sum.income)
+                }
+                MoneyRow(title: T("Free to spend"), amount: s.extraBalance, emphasis: true, color: s.extraBalance < 0 ? .red : .primary,
+                         subtitle: Pct.string(s.extraBalance, of: sum.income), percentOf: sum.income)
             }
         } header: {
             HStack {

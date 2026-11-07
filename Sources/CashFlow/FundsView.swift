@@ -63,6 +63,7 @@ struct FundsView: View {
                     Text(T("Balances update the moment you record a payment. Top-ups add, payments subtract."))
                 }
             }
+            LoansSection()
         }
         .auroraList()
         .navigationTitle(T("Funds"))
@@ -213,6 +214,10 @@ struct FundDetailView: View {
                                 Button(T("Delete"), role: .destructive) {
                                     model.perform { try model.db.deleteAdjustment(id: m.sourceId) }
                                 }
+                            } else if m.kind == .loanRepayment {
+                                Button(T("Delete"), role: .destructive) {
+                                    model.perform { try model.db.deleteLoanRepayments(ids: [m.sourceId]) }
+                                }
                             }
                         }
                     }
@@ -282,6 +287,7 @@ struct FlowGroup: View {
         case .allocationOut, .allocationIn: "creditcard"
         case .cardPayment: "banknote"
         case .adjustment: "arrow.left.arrow.right"
+        case .loanRepayment: "person.crop.circle.badge.checkmark"
         }
     }
 
@@ -292,6 +298,7 @@ struct FlowGroup: View {
         case .allocationOut: T("Top-ups to %@", line.counterparty ?? "")
         case .allocationIn: T("Top-ups from %@", line.counterparty ?? "")
         case .cardPayment: T("Card payments")
+        case .loanRepayment: T("Loans repaid by %@", line.counterparty ?? "")
         case .adjustment:
             if let c = line.counterparty { incoming ? T("Transfers from %@", c) : T("Transfers to %@", c) }
             else { incoming ? T("Deposits") : T("Withdrawals") }
