@@ -560,8 +560,8 @@ import GRDB
         try f.db.saveAllocation(CardAllocation(cardExpenseId: e.id!, fundId: nil, amount: 45_000, date: day))
         #expect(try f.db.snapshot().status(of: e).surplus == 600)
         try f.db.write { db in var x = e; x.isPaid = true; try x.update(db) }
-        let st = try f.db.snapshot().status(of: e)
-        #expect(st.surplus == 0 && st.allocated == 45_000)
+        let st = try f.db.snapshot().statuses(cardId: f.unica.id!).first { $0.id == e.id }!
+        #expect(st.expense.isPaid && st.surplus == 0 && st.allocated == 45_000)
     }
 
     @Test func repaymentsGoToFreeBalanceOrToAFund() throws {
