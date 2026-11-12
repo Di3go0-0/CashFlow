@@ -416,6 +416,15 @@ struct CardSummaryRow: View {
                 }
             }
             .font(.caption).foregroundStyle(.secondary)
+            if status.pocket != nil {
+                HStack {
+                    Text(T("In the pocket today"))
+                    Spacer()
+                    MoneyText(amount: status.pocketBalance, percentOf: status.debt > 0 ? status.debt : status.card.creditLimit)
+                        .foregroundStyle(status.pocketBalance < status.dueNow ? .orange : .secondary)
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
             if status.dueNow > 0 {
                 let due = status.cycle.previous.paymentDue
                 Text(T("Pay %@ before %@", MoneyFormat.cop(status.dueNow), due.shortDisplay))

@@ -15,6 +15,8 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "In the pocket today": "En el bolsillo hoy",
+        "Today. With all of %@: %@. Tap to set the real balance.": "Hoy. Con todo %@: %@. Toca para poner el saldo real.",
         "Take it out of the payment pocket": "Sacarlo del bolsillo de pago",
         "Paid on": "Pagado el",
         "Payment to the credit card": "Pago a la tarjeta de crédito",
@@ -585,6 +587,8 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "In the pocket today": "Dans la poche aujourd'hui",
+        "Today. With all of %@: %@. Tap to set the real balance.": "Aujourd'hui. Avec tout %@ : %@. Touchez pour saisir le solde réel.",
         "Take it out of the payment pocket": "Le sortir de la poche de paiement",
         "Paid on": "Payé le",
         "Payment to the credit card": "Paiement à la carte de crédit",

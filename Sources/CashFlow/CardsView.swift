@@ -146,7 +146,7 @@ struct CardDetailView: View {
                         title: T("Debt"),
                         value: st.debt,
                         caption: T("Available %@ of %@", MoneyFormat.cop(st.available), MoneyFormat.cop(st.card.creditLimit)),
-                        stats: [(T("Payment pocket"), st.pocket.map { model.snapshot.balance(of: $0.id!, asOf: model.fundsAsOf) } ?? st.pocketBalance),
+                        stats: [(T("Payment pocket"), st.pocketBalance),
                                 (T("Due"), st.dueNow),
                                 (T("Closes in %d d", max(model.today.days(until: st.cycle.end), 0)), st.cycleTotal)],
                         negativeIsBad: false,
@@ -163,9 +163,11 @@ struct CardDetailView: View {
                     }
                     Button { settingPocket = true } label: {
                         HStack {
-                            let pocketShown = st.pocket.map { model.snapshot.balance(of: $0.id!, asOf: model.fundsAsOf) } ?? st.pocketBalance
-                            MoneyRow(title: T("Payment pocket"), amount: pocketShown, color: pocketShown < st.dueNow ? .orange : .primary,
-                                     subtitle: T("Tap to set the real balance"))
+                            let monthEnd = st.pocket.map { model.snapshot.balance(of: $0.id!, asOf: model.fundsAsOf) } ?? st.pocketBalance
+                            MoneyRow(title: T("Payment pocket"), amount: st.pocketBalance, color: st.pocketBalance < st.dueNow ? .orange : .primary,
+                                     subtitle: monthEnd != st.pocketBalance
+                                        ? T("Today. With all of %@: %@. Tap to set the real balance.", model.month.monthName, MoneyFormat.cop(monthEnd))
+                                        : T("Tap to set the real balance"))
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                         }
                     }
