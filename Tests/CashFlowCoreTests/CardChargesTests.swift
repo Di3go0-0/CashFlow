@@ -547,6 +547,23 @@ import GRDB
         #expect(r.paid == 316_700 && r.unpaid == 0 && r.payments.count == 1)
     }
 
+    /// Un abono redondeado hacia arriba sobre una compra ya pagada no es sobrante: el pago y el cuadre lo resolvieron.
+    @Test func paidPurchasesHaveNoSurplus() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let day = DayDate(year: 2026, month: 11, day: 3)
+        let e: CardExpense = try f.db.write { db in
+            var x = CardExpense(cardId: f.unica.id!, date: day, amount: 44_400, currency: .cop, reason: "Cinema")
+            try x.insert(db)
+            return x
+        }
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: e.id!, fundId: nil, amount: 45_000, date: day))
+        #expect(try f.db.snapshot().status(of: e).surplus == 600)
+        try f.db.write { db in var x = e; x.isPaid = true; try x.update(db) }
+        let st = try f.db.snapshot().status(of: e)
+        #expect(st.surplus == 0 && st.allocated == 45_000)
+    }
+
     @Test func repaymentsGoToFreeBalanceOrToAFund() throws {
         let f = try Fixture()
         try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 3_000_000), deductions: [], bonuses: []))

@@ -174,8 +174,8 @@ struct CardDetailView: View {
                     .tint(.primary)
                     let surplus = st.expenses.reduce(0) { $0 + $1.surplus }
                     if surplus > 0 {
-                        MoneyRow(title: T("Surplus from refunds"), amount: surplus, color: .orange,
-                                 subtitle: T("Reusable in another purchase: open the refunded one"))
+                        MoneyRow(title: T("Set aside beyond what is owed"), amount: surplus, color: .orange,
+                                 subtitle: T("Unpaid purchases with more set aside than they cost, by rounding or refunds. Open one to reuse it."))
                     }
                     MoneyRow(title: T("Still to set aside"), amount: st.uncovered, color: st.uncovered > 0 ? .red : .secondary,
                              subtitle: T("Unpaid expenses without a full top-up"))
@@ -509,7 +509,7 @@ struct CardExpenseEditView: View {
                             Button {
                                 reusing = true
                             } label: {
-                                Label(T("Reuse surplus from a refunded purchase"), systemImage: "arrow.uturn.backward.circle")
+                                Label(T("Reuse surplus from another purchase"), systemImage: "arrow.uturn.backward.circle")
                             }
                         }
                     } header: {
@@ -712,8 +712,8 @@ struct CardPaymentView: View {
         status.expenses.filter { !$0.expense.isPaid && $0.expense.date <= d }
     }
 
-    private var pendingThroughToday: Int64 { unpaid(through: model.today).reduce(0) { $0 + $1.expense.amountCOP } }
-    private var pendingThroughCycle: Int64 { cycleEnd.map { unpaid(through: $0).reduce(0) { $0 + $1.expense.amountCOP } } ?? 0 }
+    private var pendingThroughToday: Int64 { unpaid(through: model.today).reduce(0) { $0 + $1.netAmount } }
+    private var pendingThroughCycle: Int64 { cycleEnd.map { unpaid(through: $0).reduce(0) { $0 + $1.netAmount } } ?? 0 }
 
     private var coveredAmount: Int64 {
         switch covers {
@@ -736,7 +736,7 @@ struct CardPaymentView: View {
     /// Lo que ya estaba apartado en el bolsillo para los gastos que este pago cubre.
     private var setAsideForCovered: Int64 {
         guard let d = coveredThrough else { return 0 }
-        return unpaid(through: d).reduce(0) { $0 + min($1.allocated, $1.expense.amountCOP) }
+        return unpaid(through: d).reduce(0) { $0 + min($1.allocated, $1.netAmount) }
     }
 
     var body: some View {

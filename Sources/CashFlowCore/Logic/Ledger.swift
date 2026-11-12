@@ -444,7 +444,9 @@ public struct CardExpenseStatus: Hashable, Sendable, Identifiable {
     /// Lo que falta amortiguar: pasar a un bolsillo para poder pagarlo.
     public var uncovered: Int64 { max(0, netAmount - allocated) }
     /// Abonos que sobran respecto al neto (por devolución o sobreabono): plata en el bolsillo reutilizable en otra compra.
-    public var surplus: Int64 { max(0, allocated - netAmount) }
+    /// Apartado de más (redondeo o devolución) que se puede mover a otra compra. Una compra pagada ya no tiene sobrante:
+    /// el pago y el cuadre del bolsillo lo resolvieron.
+    public var surplus: Int64 { expense.isPaid ? 0 : max(0, allocated - netAmount) }
 }
 
 public extension Snapshot {
