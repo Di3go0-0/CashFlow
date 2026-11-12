@@ -369,11 +369,27 @@ struct CardExpenseEditView: View {
 
     init(expense: CardExpense?, defaultCardId: Int64?, prefill: ExpensePrefill? = nil) {
         _isNew = State(initialValue: expense == nil)
+        _wasPaid = State(initialValue: expense?.isPaid ?? false)
         _expense = State(initialValue: expense ?? CardExpense(cardId: defaultCardId ?? 0, date: .today(), amount: prefill?.amount ?? 0, currency: .cop, reason: prefill?.reason ?? ""))
     }
 
+    /// Pesos que cobra el banco por esta compra, para proponer el monto del pago inmediato.
+    private var chargedCOP: Int64 {
+        let gross = Exchange.toCOP(amountMinor: expense.amount, currency: expense.currency, rate: expense.rate)
+        return max(0, gross - refunds.reduce(0) { $0 + $1.amount })
+    }
+
+    /// Se muestra cuando el gasto pasa de sin pagar a pagado en esta edición.
+    private var marksPaidNow: Bool { expense.isPaid && !wasPaid && !expense.isGenerated }
+
     @State private var addingRefund = false
     @State private var reusing = false
+    /// Si el gasto ya estaba pagado al abrir el editor. Marcarlo pagado ahora ofrece registrar el pago desde el bolsillo.
+    @State private var wasPaid = false
+    @State private var payFromPocket = true
+    @State private var payAmount: Int64 = 0
+    @State private var payAmountTouched = false
+    @State private var payDate: DayDate = .today()
     @State private var loanOn = false
     @State private var loanAmount: Int64 = 0
     @State private var loanName = ""
@@ -439,6 +455,27 @@ struct CardExpenseEditView: View {
                         let c = card.cycle(containing: expense.date)
                         Text(T("Cycle %@, due on %@.", c.displayRange, c.paymentDue.shortDisplay))
                     }
+                }
+
+                if marksPaidNow {
+                    Section {
+                        Toggle(T("Take it out of the payment pocket"), isOn: $payFromPocket)
+                        if payFromPocket {
+                            MoneyField(title: T("You paid"), amount: $payAmount)
+                                .onChange(of: payAmount) { _, new in payAmountTouched = new != chargedCOP }
+                            DayDatePicker(title: T("Paid on"), day: $payDate)
+                        }
+                    } header: {
+                        Text(T("Payment to the credit card"))
+                    } footer: {
+                        if payFromPocket {
+                            Text(T("Records a payment for just this purchase so the pocket goes down. Whatever you set aside beyond what you paid stays in the pocket."))
+                        } else {
+                            Text(T("The purchase leaves the debt but the pocket does not change. Use this when the payment is already recorded."))
+                        }
+                    }
+                    .onAppear { if !payAmountTouched { payAmount = chargedCOP } }
+                    .onChange(of: chargedCOP) { _, new in if !payAmountTouched { payAmount = new } }
                 }
 
                 if !expense.isGenerated {
@@ -579,6 +616,12 @@ struct CardExpenseEditView: View {
         guard ok else { return }
         let (on, lAmount, lName) = (loanOn, loanAmount, loanName)
         guard model.perform({ try model.db.syncLoan(cardExpenseId: saved.id, amount: on ? lAmount : 0, name: lName, date: saved.date) }) else { return }
+        if marksPaidNow && payFromPocket && payAmount > 0, let card = model.snapshot.card(saved.cardId) {
+            let payment = CardPayment(cardId: saved.cardId, date: payDate, amount: payAmount, note: saved.reason,
+                                      cycleEnd: card.cycle(containing: saved.date).end)
+            guard model.perform({ try model.db.payCard(payment, markPaidThrough: nil) }) else { return }
+        }
+        wasPaid = saved.isPaid
         if isNew {
             expense = saved
             isNew = false

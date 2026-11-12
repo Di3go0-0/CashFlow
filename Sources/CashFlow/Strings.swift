@@ -15,6 +15,11 @@ func T(_ key: String, _ args: CVarArg...) -> String {
 
 enum AppStrings {
     static let es: [String: String] = [
+        "Take it out of the payment pocket": "Sacarlo del bolsillo de pago",
+        "Paid on": "Pagado el",
+        "Payment to the credit card": "Pago a la tarjeta de crédito",
+        "Records a payment for just this purchase so the pocket goes down. Whatever you set aside beyond what you paid stays in the pocket.": "Registra un pago solo por esta compra para que el bolsillo baje. Lo que apartaste de más se queda en el bolsillo.",
+        "The purchase leaves the debt but the pocket does not change. Use this when the payment is already recorded.": "La compra sale de la deuda pero el bolsillo no cambia. Úsalo cuando el pago ya esté registrado.",
         "%d loans · lent %@ in total": "%d préstamos · %@ prestados en total",
         "%d open · lent %@": "%d pendientes · prestados %@",
         "A repayment goes into a fund or pocket, or back into the free to spend of a month.": "Un pago entra a un fondo o bolsillo, o vuelve al libre para gastar de un mes.",
@@ -580,6 +585,11 @@ enum AppStrings {
     ]
 
     static let fr: [String: String] = [
+        "Take it out of the payment pocket": "Le sortir de la poche de paiement",
+        "Paid on": "Payé le",
+        "Payment to the credit card": "Paiement à la carte de crédit",
+        "Records a payment for just this purchase so the pocket goes down. Whatever you set aside beyond what you paid stays in the pocket.": "Enregistre un paiement pour ce seul achat afin que la poche baisse. Ce que vous aviez mis de côté en plus reste dans la poche.",
+        "The purchase leaves the debt but the pocket does not change. Use this when the payment is already recorded.": "L'achat sort de la dette mais la poche ne change pas. À utiliser quand le paiement est déjà enregistré.",
         "%d loans · lent %@ in total": "%d prêts · %@ prêtés au total",
         "%d open · lent %@": "%d en cours · prêtés %@",
         "A repayment goes into a fund or pocket, or back into the free to spend of a month.": "Un remboursement entre dans un fonds ou une poche, ou revient dans le libre à dépenser d'un mois.",

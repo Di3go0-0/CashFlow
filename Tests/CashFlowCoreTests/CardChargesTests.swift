@@ -514,6 +514,39 @@ import GRDB
         #expect(snap.cardStatuses(asOf: DayDate(year: 2026, month: 11, day: 4)).first { $0.card.id == f.unica.id }?.debt == Int64(375_000))
     }
 
+    /// Pagar una sola compra de inmediato (como hace el editor al marcarla pagada): el pago queda en el ciclo de la compra,
+    /// sale del bolsillo y lo apartado de más se queda ahí.
+    @Test func immediatePaymentOfOnePurchaseLeavesThePocket() throws {
+        let f = try Fixture()
+        try f.db.startMonth(f.nov)
+        let day = DayDate(year: 2026, month: 11, day: 1)
+        let e: CardExpense = try f.db.write { db in
+            var x = CardExpense(cardId: f.unica.id!, date: day, amount: 10_000, currency: .usd, rate: 3_167, reason: "Subscription")
+            x.recomputeCOP()
+            try x.insert(db)
+            return x
+        }
+        try f.db.saveAllocation(CardAllocation(cardExpenseId: e.id!, fundId: nil, amount: 350_000, date: day))
+        let pocket = try f.db.snapshot().pocket(of: f.unica.id!)!
+        #expect(try f.db.snapshot().balance(of: pocket.id!, asOf: day) == 350_000)
+
+        // Lo que hace el editor: marcar pagada y registrar el pago por esa compra en su ciclo.
+        try f.db.write { db in
+            var x = e
+            x.isPaid = true
+            try x.update(db)
+        }
+        let cycle = f.unica.cycle(containing: day)
+        try f.db.payCard(CardPayment(cardId: f.unica.id!, date: day, amount: 316_700, note: e.reason, cycleEnd: cycle.end), markPaidThrough: nil)
+
+        let snap = try f.db.snapshot()
+        #expect(snap.balance(of: pocket.id!, asOf: day) == 33_300)
+        let st = snap.cardStatuses(asOf: DayDate(year: 2026, month: 11, day: 2)).first { $0.card.id == f.unica.id }!
+        #expect(st.debt == 0 && st.pocketBalance == 33_300)
+        let r = snap.cycleReport(card: f.unica, cycle: cycle)
+        #expect(r.paid == 316_700 && r.unpaid == 0 && r.payments.count == 1)
+    }
+
     @Test func repaymentsGoToFreeBalanceOrToAFund() throws {
         let f = try Fixture()
         try f.db.saveIncome(IncomeDetail(income: Income(sourceId: f.employer.id!, month: f.nov, date: f.nov.firstDay, netAmount: 3_000_000), deductions: [], bonuses: []))
